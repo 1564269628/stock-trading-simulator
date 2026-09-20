@@ -9,3 +9,7 @@
 !.oh-my-harness/hooks/tree.mjs
 !.oh-my-harness/tree.md
 # oh-my-harness:end
+
+node_modules/
+dist/
+.env

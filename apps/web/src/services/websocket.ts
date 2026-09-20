@@ -1,0 +1,1 @@
+export const connect = (userId: string, onMessage: (event: any) => void) => { const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?userId=${userId}`); socket.onmessage = event => onMessage(JSON.parse(event.data)); return socket }

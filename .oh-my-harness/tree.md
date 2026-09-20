@@ -3,7 +3,7 @@
 Use this file for navigation only. Verify implementation details by reading source files directly.
 
 - Source: `git ls-files --cached --others --exclude-standard`
-- Entries: 34
+- Entries: 62
 
 ```text
 ./
@@ -50,11 +50,45 @@ Use this file for navigation only. Verify implementation details by reading sour
 ├── .oh-my-harness/
 │   └── hooks/
 │       └── tree.mjs
+├── apps/
+│   ├── server/
+│   │   ├── src/
+│   │   │   ├── marketSimulator.ts
+│   │   │   ├── matchingEngine.test.ts
+│   │   │   ├── matchingEngine.ts
+│   │   │   ├── routes.test.ts
+│   │   │   ├── routes.ts
+│   │   │   ├── server.ts
+│   │   │   ├── store.ts
+│   │   │   ├── tradingService.test.ts
+│   │   │   ├── tradingService.ts
+│   │   │   ├── types.ts
+│   │   │   └── websocketHub.ts
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   └── web/
+│       ├── src/
+│       │   ├── services/
+│       │   │   ├── api.ts
+│       │   │   └── websocket.ts
+│       │   ├── App.vue
+│       │   └── main.ts
+│       ├── index.html
+│       ├── package.json
+│       ├── tsconfig.json
+│       └── vite.config.ts
 ├── docs/
-│   └── specs/
-│       ├── agent-workflow.md
-│       └── review-guidelines.md
+│   ├── specs/
+│   │   ├── agent-workflow.md
+│   │   └── review-guidelines.md
+│   ├── ai-collaboration.md
+│   ├── architecture.md
+│   ├── implementation-plan.md
+│   └── requirements.md
 ├── .gitignore
 ├── .gitkeep
-└── AGENTS.md
+├── AGENTS.md
+├── package-lock.json
+├── package.json
+└── README.md
 ```
