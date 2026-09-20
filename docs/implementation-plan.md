@@ -806,25 +806,25 @@ docs: finalize project delivery
 
 后续 Implementation PR 合并前必须满足：
 
-- [ ] Vue 3 + TypeScript + Vite
-- [ ] Node.js + Express
-- [ ] WebSocket
-- [ ] 全内存存储
-- [ ] 至少 3 支股票
-- [ ] 每秒模拟行情
-- [ ] 注册 / 登录
-- [ ] 限价买入 / 卖出
-- [ ] 价格优先
-- [ ] 时间优先
-- [ ] 部分成交
-- [ ] 持仓更新
-- [ ] 资金更新
-- [ ] 委托列表
-- [ ] 最近成交记录
-- [ ] 撮合引擎关键测试
-- [ ] 根目录一条命令启动开发环境
-- [ ] README 可复现
-- [ ] AI Prompt 记录
+- [x] Vue 3 + TypeScript + Vite
+- [x] Node.js + Express
+- [x] WebSocket
+- [x] 全内存存储
+- [x] 至少 3 支股票
+- [x] 每秒模拟行情
+- [x] 注册 / 登录
+- [x] 限价买入 / 卖出
+- [x] 价格优先
+- [x] 时间优先
+- [x] 部分成交
+- [x] 持仓更新
+- [x] 资金更新
+- [x] 委托列表
+- [x] 最近成交记录
+- [x] 撮合引擎关键测试
+- [x] 根目录一条命令启动开发环境
+- [x] README 可复现
+- [x] AI Prompt 记录
 
 # 5. AI 执行约束
 

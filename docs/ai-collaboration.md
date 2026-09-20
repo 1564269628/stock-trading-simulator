@@ -96,6 +96,22 @@ AI 先：
 
 ## 3. 后续开发建议保留的真实 Prompt
 
+以下是本次 Implementation 阶段实际发生并产生结果的记录：
+
+### 已执行：按阶段接手 Implementation PR
+
+要求 AI 在 `.worktrees/mvp` 中继续执行现有 plan，先完成 WebSocket 成交推送、服务测试、REST smoke test、真实 `npm run dev` 联调、README 和 review。过程中坚持不合并 Research PR #1。
+
+结果：补充了 `tradingService.test.ts`、`routes.test.ts`，并验证了两个用户的真实成交和 WebSocket 双方推送。
+
+### 已执行：失败先定位再修复
+
+WebSocket 初版 build 报 `websocketHub.ts` 第 17 行语法错误。先读取完整错误和文件上下文，确认是箭头函数表达式括号边界问题，再只整理该返回对象；修复后 `npm run build` 和 `npm test` 均通过。
+
+### 已执行：验证残留状态导致的联调异常
+
+首次 WebSocket 双用户脚本显示买方没有 `user:update`。没有改业务逻辑，而是检查成交事件中的 buyerId，发现开发服务未重启、旧订单被新卖单撮合。重启 `npm run dev` 后用新用户和新股票复测，买卖双方各收到 `user:update` 和 `trade:new`。
+
 下面不是“已经发生过的 AI 记录”，而是后续实现阶段建议使用的 Prompt 模板。
 
 最终提交前，只保留真正使用过并产生实际价值的 3~5 条。
