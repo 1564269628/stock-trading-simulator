@@ -2,6 +2,7 @@ import type { Server } from 'node:http'
 import { WebSocketServer, WebSocket } from 'ws'
 import type { MemoryStore } from './store.js'
 import { getOrderBookSnapshot } from './marketView.js'
+import { recentMarketTrades, userTrades } from './tradeView.js'
 
 export function createWebSocketHub(server: Server, store: MemoryStore) {
   const hub = new WebSocketServer({ server, path: '/ws' })
@@ -22,7 +23,7 @@ export function createWebSocketHub(server: Server, store: MemoryStore) {
   }
   function sendUser(userId: string) {
     const user = store.users.get(userId)
-    const marketTrades = store.trades.slice(-50); const myTrades = store.trades.filter(trade => trade.buyerId === userId || trade.sellerId === userId).slice(-100)
+    const marketTrades = recentMarketTrades(store); const myTrades = userTrades(store, userId)
     const data = { user: user ? { id: user.id, username: user.username, cash: user.cash } : undefined, cash: user?.cash, positions: Object.fromEntries(store.positions.get(userId) ?? []), orders: [...store.orders.values()].filter(order => order.userId === userId), marketTrades, myTrades, recentTrades: marketTrades }
     clients.get(userId)?.forEach(socket => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'user:update', data })) })
   }

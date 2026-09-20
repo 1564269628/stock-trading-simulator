@@ -383,3 +383,6 @@ Task 6B 根据产品验收发现的价格语义问题，先用成交驱动最新
 ## Task 6D
 
 人工验收后，Maker/Taker、固定 5×5、top-up/recenter 方案被收敛为简单模型：referencePrice 随机变化，Bot 随机提交真实 BUY/SELL，真实订单簿展示 Top 5，Bot 旧订单自动过期，用户可以撤单。为避免极端限价影响成交价，撮合采用 `clamp(referencePrice, sellLimit, buyLimit)`。
+## Task 6E
+
+完成订单历史和市场成交展示优化：REST/WebSocket 每只股票提供最新 20 条市场成交；“我的订单”保留取消及部分成交历史并按真实 Trade 计算摘要；卖出面板删除可卖数量显示，但后端风控不变。

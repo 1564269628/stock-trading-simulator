@@ -3,7 +3,7 @@
 Use this file for navigation only. Verify implementation details by reading source files directly.
 
 - Source: `git ls-files --cached --others --exclude-standard`
-- Entries: 76
+- Entries: 78
 
 ```text
 ./
@@ -65,6 +65,7 @@ Use this file for navigation only. Verify implementation details by reading sour
 │   │   │   ├── routes.ts
 │   │   │   ├── server.ts
 │   │   │   ├── store.ts
+│   │   │   ├── tradeView.ts
 │   │   │   ├── tradingService.test.ts
 │   │   │   ├── tradingService.ts
 │   │   │   ├── types.ts
@@ -91,6 +92,7 @@ Use this file for navigation only. Verify implementation details by reading sour
 │   ├── harness/
 │   │   └── plans/
 │   │       ├── 2026-09-20-latest-price-trade-consistency-plan.md
+│   │       ├── 2026-09-20-order-history-market-trades-ui-plan.md
 │   │       ├── 2026-09-20-persistent-orderbook-liquidity-plan.md
 │   │       ├── 2026-09-20-reference-price-active-liquidity-plan.md
 │   │       ├── 2026-09-20-trading-experience-manual-acceptance-fixes.md

@@ -2,8 +2,18 @@ import express from 'express'
 import { describe, expect, it } from 'vitest'
 import { createRoutes, summarizeExecution } from './routes.js'
 import { MemoryStore } from './store.js'
+import { recentMarketTrades } from './tradeView.js'
 
 describe('REST API', () => {
+  it('keeps the latest 20 market trades independently for each stock', () => {
+    const store = new MemoryStore()
+    for (let index = 0; index < 25; index++) store.trades.push({ tradeId: `a-${index}`, symbol: '600519', price: index, quantity: 1, buyOrderId: 'b', sellOrderId: 's', buyerId: 'buyer', sellerId: 'seller', createdAt: new Date(index).toISOString() })
+    for (let index = 0; index < 3; index++) store.trades.push({ tradeId: `b-${index}`, symbol: '000858', price: index, quantity: 1, buyOrderId: 'b', sellOrderId: 's', buyerId: 'buyer', sellerId: 'seller', createdAt: new Date(index).toISOString() })
+    const result = recentMarketTrades(store)
+    expect(result.filter(trade => trade.symbol === '600519')).toHaveLength(20)
+    expect(result.filter(trade => trade.symbol === '600519').map(trade => trade.price)).toEqual(Array.from({ length: 20 }, (_, index) => index + 5))
+    expect(result.filter(trade => trade.symbol === '000858')).toHaveLength(3)
+  })
   it('supports register, login, state and order validation', async () => {
     const store = new MemoryStore(); const app = express(); app.use(express.json()); app.use('/api', createRoutes(store)); const server = app.listen(0)
     const address = server.address() as { port: number }; const url = `http://127.0.0.1:${address.port}/api`

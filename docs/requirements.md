@@ -340,3 +340,8 @@ Research 阶段只输出：
 - 真实盘口按 asks 升序、bids 降序聚合并展示前 5 档，不强制填满。
 - Bot 活动订单约 9 秒未完全成交自动取消；用户可取消 PENDING/PARTIALLY_FILLED 剩余部分。
 - 成交价为 `clamp(referencePrice, sellLimit, buyLimit)`，`latestPrice` 仍只来自真实成交。
+## Task 6E 展示规则
+
+- 我的订单包含当前股票的全部订单状态，取消后的部分成交订单仍保留真实成交摘要。
+- 市场成交按股票分别保留/返回最新 20 条，前端按时间倒序展示。
+- SELL UI 不显示可卖数量；服务端 `availableToSell` 和 SELL reservation 继续阻止超卖。
