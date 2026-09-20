@@ -16,7 +16,7 @@
 
 resting order / maker price 已恢复，clamp 专用测试已移除并替换为先卖后买、先买后卖断言；Task 6F 购买力、Task 6D Bot、Task 6E 展示回归保持通过。浏览器验收待执行。
 
-独立审查收口：MarketSimulator 已将采样点写入服务端 90 点 priceHistory；盘口卖档编号已修正；新增真实 WebSocket integration test；Vue 补丁符号残留已清理。当前全量测试为 37/37，用户最终验收和 Review Gate 仍未完成。
+独立审查收口：MarketSimulator 已将采样点写入服务端 90 点 priceHistory；盘口卖档编号已修正；新增真实 WebSocket integration test；Vue 补丁符号残留已清理。当前全量测试为 37/37，用户最终产品验收已通过，Local Reviewer Gate 已通过。
 
 ---
 
@@ -476,7 +476,7 @@ BUY 5000 x 100
 - [x] npm run build 通过。
 - [x] git diff --check 通过。
 - [ ] 浏览器顺序成交验收通过。
-- [ ] 用户最终产品验收后再进入 Harness Review Gate。
+- [x] 用户最终产品验收后再进入 Harness Review Gate。
 
 ## 2026-09-20 独立审查收口
 
@@ -488,8 +488,8 @@ BUY 5000 x 100
 - [x] `npm run build` 通过。
 - [x] `git diff --check` 通过。
 - [x] 浏览器 smoke：错误登录后注册成功，旧错误提示消失。
-- [ ] Harness Local Reviewer Gate：待独立 reviewer。
-- [ ] 用户最终产品验收。
+- [x] Harness Local Reviewer Gate：独立 reviewer 结论为 blocking findings 0、non-blocking findings 0。
+- [x] 用户最终产品验收。
 
 ## 明确不做
 
