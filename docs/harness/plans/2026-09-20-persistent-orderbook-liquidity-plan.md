@@ -1,908 +1,648 @@
-# Persistent 5-Level Order Book + Active Trade Bot Implementation Plan
+# Random Market Orders + Order Cancellation Implementation Plan
 
-> **For agentic workers:** 步骤使用复选框（`- [ ]`）语法进行跟踪。
+> **For agentic workers:** 使用复选框（`- [ ]`）跟踪步骤。
 >
 > Follow-up plan for Implementation PR #4.
->
-> Primary plan: `docs/harness/plans/2026-09-20-trading-experience-plan.md`
->
-> Previous plans:
-> - `docs/harness/plans/2026-09-20-trading-experience-manual-acceptance-fixes.md`
-> - `docs/harness/plans/2026-09-20-latest-price-trade-consistency-plan.md`
-> - `docs/harness/plans/2026-09-20-reference-price-active-liquidity-plan.md`
 >
 > PR: https://github.com/1564269628/stock-trading-simulator/pull/4
 >
 > Branch: `feat/trading-experience`
 >
-> 本计划是 Task 6C 浏览器产品验收后的新修复计划，记为 **Task 6D**。保留 6C 的历史事实，不回写或伪造旧计划结果。本轮继续在 PR #4 内实现，不新建 PR，不修改 main，不提前进入最终 Review Gate。
+> 本计划仍记为 **Task 6D**，但用本版本覆盖上一版过度复杂的 Maker/Taker 设计。Task 6A/6B/6C 保留为历史事实。本轮继续在 PR #4 内实现，不新建 PR、不修改 main、不提前进入最终 Review Gate。
 
-**Goal:** 把当前“两个 Bot 每秒互相成交、成交后盘口被清空”的流动性模型改成“持续 5 档真实买卖盘 + 独立主动成交 Bot + 成交/吃单后自动补充盘口”，保证正常运行时三只股票长期同时存在买1~买5和卖1~卖5，并让用户的高价 BUY / 低价 SELL 能真正吃到系统挂出的正常价位。
+**Goal:** 用一个简单的模拟市场模型替换当前复杂 Bot 方案：后台 `referencePrice` 每秒随机变化；每只股票每秒在参考价附近随机生成多笔 BUY / SELL，全部走真实 `submitOrder -> MatchingEngine`；盘口只展示真实订单簿排序后的前 5 档；用户未成交或部分成交订单可以主动取消；Bot 长时间未成交订单自动过期，避免订单无限堆积。
 
-**Architecture:** 保留 Task 6C 的 `referencePrice` 和“用户限价完全自由”语义，但拆分 Bot 职责。Maker Bot 只负责在 referencePrice 两侧维持 5 档被动挂单，Active/Taker Bot 只负责小数量主动吃系统 Maker 的最佳一档以产生真实成交。用户订单仍走原始 unrestricted `submitOrder -> MatchingEngine` 路径，因此用户 BUY 5000 会优先吃掉已经存在的正常卖盘，并按 resting ask 价格成交，而不是被拒绝或一直 PENDING。每个 tick 在主动成交前后都对 Maker 深度做 reconciliation / top-up，referencePrice 明显漂移时只撤换系统 Bot 自己的旧报价，不触碰用户订单。
+**Architecture:** 不再区分 Maker Bot / Taker Bot，也不要求系统强行维护固定 5×5 深度。Bot 就是普通模拟交易者，每秒随机下买单和卖单；价格交叉时自然产生真实成交，不交叉的订单自然留在订单簿。页面实时显示当前真实 Top 5。为避免极端用户限价成为 resting order 后把下一笔成交价格带到 5000 或 1，成交价改为“`referencePrice` 在买卖双方限价区间内的夹取值”：用户仍可任意报价，但成交价保持在双方都接受且接近模拟市场中心的位置。
 
 **Tech Stack:** TypeScript、Node.js、Express、Vitest、WebSocket、Vue 3、内存 MemoryStore。
 
 ---
 
-## 1. 当前根因
+## 1. 最终产品模型
 
-当前 `apps/server/src/botTrader.ts` 的 `runLiquidityCycle()` 把“提供盘口”和“制造成交”写成了同一对订单。
+### 1.1 后台参考价
 
-例如当前 SELL-first 分支：
-
-```text
-Bot A: SELL referencePrice * (1 + 0.1%)
-Bot B: BUY  referencePrice * (1 + 0.1%)
-```
-
-两个价格完全相同：
-
-```text
-Bot A 卖单刚进入 order book
-→ Bot B 立刻把它全部成交
-→ 两边订单都 FILLED
-→ 卖盘恢复为空
-```
-
-BUY-first 分支对称，因此系统虽然每秒有 Trade，但 Maker 订单不会长期停留在 order book。
-
-这导致：
-
-1. 盘口经常只有用户自己的订单，几乎没有 Bot 买卖盘。
-2. 用户提交 `BUY 5000 x 100` 时，如果当时卖盘为空，订单只能 PENDING 并挂成买1 5000。
-3. “三股持续产生成交”并不等价于“持续有双边流动性”。
-4. Task 6C 的验收缺少“每只股票必须长期同时保有 5 档 bid + 5 档 ask”这一产品约束。
-
----
-
-## 2. Task 6D 最终产品语义
-
-### 2.1 referencePrice 保留
+继续保留：
 
 ```text
 referencePrice
-= 后台随机市场中心
+= 模拟市场中心
 = 每秒小幅随机游走
-= Maker 报价中心
 ```
 
-MarketSimulator 继续不直接修改 `latestPrice`。
+MarketSimulator 只更新 `referencePrice`，不直接修改 `latestPrice`。
 
-### 2.2 latestPrice 保留 Task 6B 语义
+### 1.2 随机 Bot 订单
 
-```text
-latestPrice
-= 当前股票最后一笔真实 Trade.price
-```
-
-仍用于：
-
-- 顶部最新价；
-- 盘口当前价；
-- 持仓当前价；
-- changePercent；
-- 价格历史。
-
-### 2.3 用户价格继续完全自由
-
-禁止新增：
-
-- 用户 referencePrice 偏离校验；
-- 涨跌停；
-- 价格笼子；
-- BUY 5000 / SELL 1 拒绝逻辑。
-
-普通用户仍调用：
-
-```text
-submitOrder(store, userInput)
-→ MatchingEngine 默认 unrestricted matching
-```
-
-### 2.4 持续真实 5 档盘口
-
-正常运行状态下，每只股票目标为：
-
-```text
-卖5
-卖4
-卖3
-卖2
-卖1
-
-当前价
-
-买1
-买2
-买3
-买4
-买5
-```
-
-并且这些档位来自真实 `OrderBook` 中的 Bot 限价单，不在前端伪造。
-
-### 2.5 Maker 与 Active Bot 分离
-
-```text
-Maker Bot
-→ 维持真实 5 档 bids / asks
-→ 不负责每秒把自己的挂单全部吃掉
-
-Active/Taker Bot
-→ 每秒随机选择 BUY 或 SELL
-→ 只吃一小部分系统 Maker 最佳档
-→ 产生真实 Trade
-→ 不主动吃用户极端挂单
-```
-
-### 2.6 用户 BUY 5000 的目标行为
-
-假设：
-
-```text
-referencePrice ≈ 1490
-
-卖1 1491 x 200
-卖2 1492 x 200
-卖3 1493 x 200
-...
-```
-
-用户提交：
-
-```text
-BUY 5000 x 100
-```
-
-必须：
-
-```text
-立即与卖1 真实成交 100
-成交价 = 1491（resting ask price）
-订单 FILLED
-remainingQuantity = 0
-不会变成 PENDING 的买1 5000
-latestPrice ≈ 1491
-```
-
-这不是对用户 5000 做限制，而是因为市场本来就有可成交卖盘。
-
----
-
-## 3. 参数建议
-
-使用简单固定常量：
-
-```typescript
-const MAKER_DEPTH = 5
-const MAKER_LEVEL_STEP_RATE = 0.001       // 每档约 0.10%
-const MAKER_LEVEL_TARGET_QTY = 200        // 每档目标 200 股
-const ACTIVE_TRADE_QTY = 10               // 主动成交每次只吃 10 股
-const MAKER_RECENTER_RATE = 0.004          // Maker 中心偏离 referencePrice 约 0.4% 时重心
-const BOT_TICK_MS = 1000
-```
-
-说明：
-
-- `MAKER_LEVEL_TARGET_QTY > 常见 demo 用户数量 100`，避免用户 BUY 100 一次把整个卖1 档位吃空。
-- Active Bot 每次只吃 10，远小于 200，因此成交后档位仍然存在。
-- 每 tick 最后再 top-up 到 200。
-- 参数是 demo 体验参数，不是证券制度。
-
-如果真实浏览器验收表明 200 太小，可提高到 300 或 500；不要降低到等于 Active Bot 单笔数量。
-
----
-
-# Task 1：先用测试锁定当前盘口被自成交清空的 Bug
-
-## 文件
-
-- 修改：`apps/server/src/botTrader.test.ts`
-- 修改：`apps/server/src/marketView.test.ts`（如果现有测试适合扩展）
-
-- [ ] **步骤 1（RED）：新增“一个 Bot tick 后必须同时有双边盘口”测试**
-
-目标行为：
-
-```typescript
-const store = new MemoryStore()
-const bots = initializeBots(store)
-
-runBotTick(store, bots, () => 0.1)
-
-const book = getOrderBookSnapshot(store, '600519')
-
-expect(book.bids).toHaveLength(5)
-expect(book.asks).toHaveLength(5)
-```
-
-当前 Task 6C 实现预期 RED，因为两个 Bot 会互相把挂单全部成交。
-
-- [ ] **步骤 2（RED）：新增“三只股票都必须双边 5 档”测试**
-
-```typescript
-for (const symbol of ['600519', '000858', '300750']) {
-  const book = getOrderBookSnapshot(store, symbol)
-  expect(book.bids).toHaveLength(5)
-  expect(book.asks).toHaveLength(5)
-}
-```
-
-- [ ] **步骤 3：运行测试确认 RED**
-
-```bash
-npm --workspace apps/server exec vitest run src/botTrader.test.ts src/marketView.test.ts
-```
-
-不得修改断言来适配当前空盘口。
-
----
-
-# Task 2：把 Bot 拆成 Maker 和 Active/Taker 两种职责
-
-## 文件
-
-- 修改：`apps/server/src/botTrader.ts`
-- 修改：`apps/server/src/botTrader.test.ts`
-
-## 设计
-
-建议三个 Bot 明确角色：
-
-```text
-market-maker-bid
-market-maker-ask
-market-taker
-```
-
-也可以继续使用 3 个现有 Bot id，但代码中必须明确角色，不再随机让两个 Bot 用相同价格互吃。
-
-- [ ] **步骤 1：实现 5 档价格梯子纯函数**
-
-例如：
-
-```typescript
-buildMakerLadder(stock)
-```
-
-当 `referencePrice = 1500`：
-
-```text
-asks:
-1501.50
-1503.00
-1504.50
-1506.00
-1507.50
-
-bids:
-1498.50
-1497.00
-1495.50
-1494.00
-1492.50
-```
-
-实际按 2 位小数 round。
-
-要求：
-
-- ask 全部 > referencePrice；
-- bid 全部 < referencePrice；
-- ask 升序；
-- bid 降序；
-- 5 个价格必须是 distinct。
-
-- [ ] **步骤 2：新增 ladder 单测**
-
-至少覆盖 600519、000858，确认低价股票 rounding 后仍有 5 个不同档位。
-
-- [ ] **步骤 3：实现 Maker 深度 reconciliation**
-
-建议函数：
-
-```typescript
-ensureMakerDepth(store, bots, symbol)
-```
-
-对每个 target bid / ask：
-
-1. 计算对应 Maker Bot 当前活动 remainingQuantity；
-2. 若低于 `MAKER_LEVEL_TARGET_QTY`：
-   - 只补差额；
-   - 通过 `submitOrder` 正常创建订单；
-3. 不允许每秒无脑再加完整 200，避免订单数量和盘口数量无限叠加。
-
-Maker 报价必须进入真实订单簿。
-
-- [ ] **步骤 4：Maker 下单使用内部 post-only 语义**
-
-Maker 的职责是“挂盘”，不是主动吃盘。
-
-不新增用户 API 参数。
-
-可以复用内部 `MatchOptions`：
-
-```typescript
-matchOptions: {
-  canMatch: () => false
-}
-```
-
-使 Maker 新报价成为被动 resting order。
-
-重要：
-
-- 这只允许 BotTrader 内部使用；
-- REST 用户仍使用 unrestricted matching；
-- 不改变普通用户撮合行为。
-
-- [ ] **步骤 5：测试 Maker 初始化后真实 5 档存在**
-
-检查：
-
-- 每档来自真实 Order；
-- `remainingQuantity > 0`；
-- marketView 能看到 5 bid + 5 ask；
-- 不是 UI mock 数据。
-
----
-
-# Task 3：增加系统 Bot 报价重心与旧报价清理
-
-## 问题
-
-referencePrice 每秒随机变化。
-
-如果 Maker 永远不更新旧报价：
-
-```text
-referencePrice 已从 1500 移到 1520
-盘口还停留在 1492~1508
-```
-
-如果每秒直接再建 10 个新订单，则会订单爆炸。
-
-因此需要“只对系统 Maker 自己的订单”做受控 recenter。
-
-## 文件
-
-- 修改：`apps/server/src/types.ts`
-- 修改：`apps/server/src/tradingService.ts`
-- 修改：`apps/server/src/tradingService.test.ts`
-- 修改：`apps/server/src/marketView.ts`
-- 修改：`apps/server/src/marketView.test.ts`
-- 修改：`apps/server/src/botTrader.ts`
-
-- [ ] **步骤 1（RED）：新增内部取消测试**
-
-扩展：
-
-```typescript
-OrderStatus =
-  | 'PENDING'
-  | 'PARTIALLY_FILLED'
-  | 'FILLED'
-  | 'CANCELLED'
-```
-
-提供仅内部使用的服务函数，例如：
-
-```typescript
-cancelOrder(store, userId, orderId)
-```
-
-要求：
-
-- 只能取消订单所属用户自己的活动订单；
-- 从 order book 移除；
-- status -> CANCELLED；
-- remainingQuantity 保留，不能伪装成成交；
-- 不创建 Trade。
-
-- [ ] **步骤 2：修正“活动订单”判断**
-
-以下地方必须排除 CANCELLED：
-
-- `availableToSell()` 的 SELL reserved quantity；
-- `marketView.ts`；
-- 任何“当前活动订单”服务端判断。
-
-不要把 CANCELLED 当 FILLED。
-
-- [ ] **步骤 3：实现 Maker recenter**
-
-通过当前 Maker 活动 quotes 推导其 quote center。
-
-只有当：
-
-```text
-abs(makerCenter - referencePrice) / referencePrice
-> MAKER_RECENTER_RATE
-```
-
-才：
-
-1. CANCEL 系统 Maker 当前该 symbol 的旧报价；
-2. 用户订单完全不动；
-3. 用新的 referencePrice 重建 5 bid + 5 ask。
-
-避免每秒取消重建全部 10 档。
-
-- [ ] **步骤 4：新增“不会无限堆活动 Bot 订单”测试**
-
-运行多次 tick 后：
-
-```text
-每只股票活动 Maker 价位仍约 10 档
-不是 10、20、30、40... 无限增长
-```
-
-允许历史 `store.orders` 保留 FILLED/CANCELLED 记录，但活动 order book 必须 bounded。
-
----
-
-# Task 4：独立 Active/Taker Bot，只吃 Maker 的小数量
-
-## 文件
-
-- 修改：`apps/server/src/botTrader.ts`
-- 修改：`apps/server/src/botTrader.test.ts`
-
-- [ ] **步骤 1（RED）：主动成交后 5 档不能消失**
-
-初始 Maker：
-
-```text
-卖1 1491 x 200
-...
-买1 1489 x 200
-...
-```
-
-执行 Active BUY 10 后：
-
-```text
-Trade = 1491 x 10
-卖1 仍至少有 190
-仍然存在卖1~卖5
-买1~买5 仍存在
-```
-
-- [ ] **步骤 2：实现 `runActiveTrade()`**
-
-Active Bot 每个 symbol 每 tick 只提交一笔小订单。
-
-BUY 时：
-
-1. 找系统 ask Maker 的最佳活动档；
-2. incoming BUY 价格 = 该 ask price；
-3. quantity = ACTIVE_TRADE_QTY；
-4. `canMatch` 只允许匹配系统 Maker ask 的 userId。
-
-SELL 对称。
-
-因此 Active Bot：
-
-- 不会主动吃用户 BUY 5000；
-- 不会主动吃用户 SELL 1；
-- 不会把一个普通用户挂单当成“市场随机行情”的驱动力。
-
-- [ ] **步骤 3：保留真实撮合**
-
-仍然必须：
-
-```text
-submitOrder
-→ MatchingEngine
-→ Trade
-→ TradingService 记账
-→ latestPrice
-```
-
-禁止直接创建 Trade。
-
-- [ ] **步骤 4：每 tick 顺序**
-
-推荐：
-
-```text
-for each symbol:
-  1. ensureMakerDepth()
-  2. runActiveTrade()
-  3. ensureMakerDepth()   // top-up 被吃掉的数量
-```
-
-这样正常 tick 结束后盘口深度恢复到目标值。
-
----
-
-# Task 5：服务启动时立即种好 5 档盘口
-
-## 文件
-
-- 修改：`apps/server/src/botTrader.ts`
-- 必要时修改：`apps/server/src/server.ts`
-- 修改：`apps/server/src/botTrader.test.ts`
-
-## 原因
-
-如果只使用：
-
-```typescript
-setInterval(..., 1000)
-```
-
-服务启动后的第一个 1 秒内 order book 仍然为空。
-
-用户可能在这段时间提交 BUY 5000，又得到 PENDING。
-
-- [ ] **步骤 1：startBotTrader 同步执行一次 initial seed**
-
-要求：
-
-```text
-startBotTrader()
-→ initializeBots()
-→ 立即 ensure 3 股的 5x5 Maker book
-→ 再启动 interval
-```
-
-因为 `server.ts` 当前在 `server.listen()` 前调用 `startBotTrader()`，应确保服务开始接受 HTTP 请求时，盘口已经有真实双边流动性。
-
-- [ ] **步骤 2：测试初始 seed 不需要等待 1 秒**
-
-调用 `startBotTrader` 后立即 snapshot：
-
-```text
-600519: 5 bid + 5 ask
-000858: 5 bid + 5 ask
-300750: 5 bid + 5 ask
-```
-
-测试中必须 stop timer。
-
----
-
-# Task 6：直接锁定用户 BUY 5000 / SELL 1 的产品行为
-
-## 文件
-
-- 修改：`apps/server/src/botTrader.test.ts`
-- 修改：`apps/server/src/tradingService.test.ts`
-- 修改：`apps/server/src/routes.test.ts`
-
-- [ ] **步骤 1：BUY 5000 x 100 必须真实成交**
-
-Arrange：
-
-1. MemoryStore；
-2. initialize/seed Maker book；
-3. 普通用户；
-4. 600519 referencePrice 约 1500；
-5. 卖1至少有 200。
-
-Act：
-
-```typescript
-submitOrder(store, {
-  userId,
-  symbol: '600519',
-  side: 'BUY',
-  price: 5000,
-  quantity: 100
-})
-```
-
-Assert：
-
-```text
-status = FILLED
-remainingQuantity = 0
-trades.length > 0
-trade.price < 5000
-trade.price = resting Maker ask
-position +100
-latestPrice = 最后一笔真实 trade.price
-用户 order book 中不存在 BUY 5000 residual
-盘口仍有 5 个 ask price levels
-```
-
-- [ ] **步骤 2：SELL 1 x 100 对称测试**
-
-给用户足够持仓后：
-
-```text
-SELL 1 x 100
-```
-
-应该吃掉正常 Maker bid：
-
-```text
-成交价 ≈ referencePrice
-不是 1
-订单 FILLED
-盘口双边仍存在
-```
-
-- [ ] **步骤 3：REST smoke**
-
-通过真实 `POST /api/orders` 验证高价 BUY：
-
-- HTTP 201；
-- 返回真实 trades；
-- order FILLED；
-- GET state 后 positions / latestPrice / marketTrades 一致。
-
----
-
-# Task 7：WebSocket / 盘口更新
-
-## 文件
-
-- 检查：`apps/server/src/websocketHub.ts`
-- 必要时最小修改：`apps/server/src/websocketHub.ts`
-- 原则上不修改：`apps/web/src/OrderBookPanel.vue`（实际路径按仓库当前文件）
-
-要求：
-
-- Maker seed / top-up 产生的正常订单结果继续触发 orderbook:update；
-- Active Trade 继续触发 trade:new + user/orderbook updates；
-- recenter 的取消如果随后有 Maker 新订单，最终必须广播新 snapshot；
-- 不在前端自己拼 5 档假盘口。
-
-如果取消动作本身可能造成无后续 submit 的盘口变化，再新增最小 `broadcastOrderBook(symbol)` 服务端能力；不要新增复杂事件总线。
-
----
-
-# Task 8：文档更新
-
-## 文件
-
-- 修改：`README.md`
-- 修改：`docs/requirements.md`
-- 修改：`docs/architecture.md`
-- 修改：`docs/ai-collaboration.md`
-
-- [ ] **README / requirements**
-
-明确最终模拟市场：
-
-```text
-referencePrice:
-  后台随机游走
-
-Maker:
-  长期维持 5 档 bid + 5 档 ask
-
-Active Bot:
-  每秒小额吃 Maker 最佳档，形成真实成交
-
-User:
-  限价完全自由
-  高价 BUY 会吃正常卖盘
-  低价 SELL 会吃正常买盘
-
-latestPrice:
-  最近真实成交价
-```
-
-- [ ] **architecture**
-
-最终数据流：
-
-```text
-MarketSimulator
-  -> referencePrice
-
-referencePrice
-  -> Maker ladder (5 bid + 5 ask)
-  -> real OrderBook
-
-User Order ----------------------+
-                                 |
-Active Bot -> submitOrder -------+-> MatchingEngine
-                                      |
-                                      -> Trade
-                                      -> latestPrice
-                                      -> cash / positions
-                                      -> priceHistory
-                                      -> WebSocket
-
-Maker reconciliation
-  -> top-up consumed depth
-  -> recenter stale system quotes
-  -> never edit user orders
-```
-
-- [ ] **AI collaboration**
-
-记录真实验收发现：
-
-```text
-Task 6C 虽解决了“Bot 不应主动吃极端用户价”，但其 liquidity cycle 使用两个同价 Bot 订单立即互相成交，导致盘口无法持续保留双边挂单。
-产品验收进一步明确必须同时满足：
-1. 真实持续成交；
-2. 真实持续 5 档双边盘口；
-3. BUY 5000 能立即吃正常卖盘。
-因此 Task 6D 将做市 Maker 与主动成交 Taker 分离，并在成交后自动 top-up。
-```
-
----
-
-# Task 9：全量自动验证
-
-- [ ] **步骤 1**
-
-```bash
-npm test
-```
-
-必须全部通过。
-
-- [ ] **步骤 2**
-
-```bash
-npm run build
-```
-
-必须通过。
-
-- [ ] **步骤 3**
-
-```bash
-git diff --check
-```
-
-无输出。
-
-- [ ] **步骤 4**
-
-通过正常 Harness hook 刷新 `.oh-my-harness/tree.md`。
-
-禁止手工编辑 tree。
-
----
-
-# Task 10：真实浏览器验收
-
-运行：
-
-```bash
-npm run dev
-```
-
-## 场景 A：空操作观察盘口
-
-服务启动后立即注册/登录，不手工下单。
-
-依次查看：
+每秒对：
 
 - 600519
 - 000858
 - 300750
 
-每只股票都必须看到：
+分别随机生成一批真实订单。
+
+建议每只股票每 tick：
 
 ```text
-卖5
-卖4
-卖3
-卖2
-卖1
-当前价
-买1
-买2
-买3
-买4
-买5
+随机 2~4 笔 BUY
+随机 2~4 笔 SELL
 ```
 
-不能再出现只有“当前价”或只有单边 1 档。
+价格：
 
-## 场景 B：连续观察 15 秒
+```text
+referencePrice 附近 ±0.5%
+```
 
-要求：
+数量：
 
-- 市场成交持续增加；
-- 走势图持续变化；
-- 同时盘口仍保持 5 档双边；
-- Active Bot 成交不能每次把盘口全部吃光；
-- 不能出现活动 Bot 订单无限增加导致盘口越来越乱。
+```text
+10 / 20 / 50 / 100
+```
 
-## 场景 C：用户 BUY 5000 x 100
+所有 Bot 订单必须：
 
-以贵州茅台正常价约 1500 为例：
+```text
+submitOrder
+→ MatchingEngine
+```
+
+禁止直接创建 Trade 或直接修改 order book。
+
+### 1.3 盘口
+
+系统 order book 可以有很多订单。
+
+页面只展示：
+
+```text
+asks：最低卖价开始的前 5 档
+bids：最高买价开始的前 5 档
+```
+
+不要求每个时刻一定正好 5+5。
+
+允许：
+
+- 某一刻只有 3 档卖盘；
+- 某一刻没有买盘；
+- 下一次 Bot tick 后又出现新的挂单。
+
+这符合模拟市场的随机性。
+
+### 1.4 用户价格完全自由
+
+继续允许：
 
 ```text
 BUY 5000
-数量 100
+BUY 10000
+SELL 1
 ```
 
-必须：
+不增加：
 
-- 下单成功；
-- 立即真实成交；
-- 成交价是当时卖1/卖盘正常价格，而不是 5000；
-- 订单不是 PENDING 100；
-- 获得真实持仓；
-- latestPrice 等于最新 Trade；
-- 盘口卖1~卖5仍然存在（卖1可数量减少，随后自动 top-up）。
+- referencePrice 偏离校验；
+- 涨跌停；
+- 价格笼子；
+- 前端报价限制。
 
-## 场景 D：用户 SELL 1 x 100
+### 1.5 简单成交价规则
 
-用户已有持仓后：
+当前 Task 6C 的 resting-order price 会有一个问题：
 
 ```text
-SELL 1
-数量 100
+用户 BUY 5000 先挂住
+之后 Bot SELL 1500 到来
+→ 按 resting price 会成交在 5000
 ```
 
-必须：
+这又会让单个用户把最新价带飞。
 
-- 立即吃正常买盘；
-- 实际成交价约等于买1，不是 1；
-- 正常更新资金/持仓；
-- 买1~买5继续存在。
+本轮将成交价改为：
 
-## 场景 E：Maker recenter
+```text
+tradePrice = clamp(referencePrice, sellLimitPrice, buyLimitPrice)
+```
 
-观察 referencePrice / 正常成交方向一段时间。
+也就是：
 
-确认：
+```text
+成交价必须：
+>= 卖方最低接受价
+<= 买方最高接受价
 
-- Maker ladder 会随市场中心逐步移动；
-- 不会永远停在服务启动价格；
-- 旧 Maker orders 不会一直堆在活动盘口；
-- 用户订单不会被 recenter 删除。
+并尽量取当前 referencePrice
+```
 
-## 场景 F：双窗口
+例 1：
 
-两个普通用户：
+```text
+referencePrice = 1500
+BUY 5000
+SELL 1498
+→ tradePrice = 1500
+```
 
-- A 高价 BUY 能吃 Maker 卖盘；
-- B 无需刷新看到 market trade / orderbook 变化；
-- 两边看到同一个最新价和盘口。
+例 2：
+
+```text
+referencePrice = 1500
+BUY 1495
+SELL 1
+→ tradePrice = 1495
+```
+
+这不是限制用户报价，只是定义模拟市场成交价。
+
+### 1.6 latestPrice
+
+继续保持：
+
+```text
+latestPrice = 最近一笔真实 Trade.price
+```
+
+真实成交后更新：
+
+- latestPrice
+- changePercent
+- priceHistory
 
 ---
 
-## 11. 完成条件
+# Task 1：简化 BotTrader 为随机 BUY / SELL
 
-只有以下全部满足，Task 6D 才算 implementation complete：
+**文件：**
 
-- [ ] 三只股票服务启动后立即有真实 5 bid + 5 ask。
-- [ ] Maker 报价不是前端伪造。
-- [ ] Maker 不再和另一 Maker 用同价订单立刻全量互吃。
-- [ ] Active Bot 与 Maker Bot 职责分离。
-- [ ] Active Bot 每次成交量显著小于 Maker 单档目标量。
-- [ ] Active Bot 只主动吃系统 Maker quote，不主动吃极端用户挂单。
-- [ ] 每 tick 后 Maker 深度会自动 top-up。
-- [ ] referencePrice 漂移后 Maker 可以受控 recenter。
-- [ ] recenter 只处理系统 Bot 订单，不碰用户订单。
-- [ ] 用户 BUY 5000 x 100 能立即吃正常卖盘并真实成交。
-- [ ] 用户 SELL 1 x 100 能立即吃正常买盘并真实成交。
-- [ ] 普通用户默认 MatchingEngine 行为仍保持 price-time priority / partial fill / resting price。
-- [ ] latestPrice 仍只等于最后真实 Trade.price。
+- 修改：`apps/server/src/botTrader.ts`
+- 修改：`apps/server/src/botTrader.test.ts`
+- 必要时修改：`apps/server/src/server.ts`
+
+- [ ] **步骤 1（RED）：锁定一个 tick 会同时生成 BUY 和 SELL**
+
+测试单只股票的 tick 结果中：
+
+```typescript
+expect(results.some(result => result.order.side === 'BUY')).toBe(true)
+expect(results.some(result => result.order.side === 'SELL')).toBe(true)
+```
+
+并确认订单真实进入 `store.orders` / `OrderBook` 或真实成交。
+
+- [ ] **步骤 2（GREEN）：删除 Maker/Taker 角色设计**
+
+移除上一版 Task 6D 尚未实现的：
+
+- Maker ladder；
+- Maker top-up；
+- Active/Taker Bot；
+- recenter；
+- 固定 5×5 深度要求。
+
+将 `runBotTick` 简化成：
+
+```text
+for each symbol:
+  生成 2~4 BUY
+  生成 2~4 SELL
+  每笔价格在 referencePrice ±0.5%
+  每笔数量随机 10/20/50/100
+  submitOrder()
+```
+
+- [ ] **步骤 3：启动时立即跑一次 tick**
+
+`startBotTrader()`：
+
+1. initializeBots；
+2. 立即执行一次 `runBotTick`；
+3. 再启动 1000ms interval。
+
+这样用户打开页面时通常已经有盘口和成交，不需要等 1 秒。
+
+- [ ] **步骤 4：验证 Bot 仍遵守 SELL 持仓规则**
+
+Bot 必须有足够初始现金与持仓。
+
+不得绕过 `TradingService`。
+
+---
+
+# Task 2：移除 Bot 专用 ±2% 撮合资格带，恢复统一撮合
+
+**文件：**
+
+- 修改：`apps/server/src/botTrader.ts`
+- 修改：`apps/server/src/tradingService.ts`
+- 修改：`apps/server/src/matchingEngine.ts`
+- 修改：对应测试
+
+Task 6C 为 Bot 增加了特殊 `canMatch` 价格带。
+
+本轮目标是回到更简单的模型：
+
+```text
+用户订单
+Bot 订单
+      ↓
+同一个 MatchingEngine
+```
+
+- [ ] **步骤 1：先增加统一撮合测试**
+
+验证 Bot 普通 BUY / SELL 与用户订单使用相同价格交叉条件。
+
+- [ ] **步骤 2：删除 BotTrader 对特殊 match policy 的依赖**
+
+如果 `MatchOptions` 在其他地方已经没有必要，则做最小清理；如果仍被测试或内部能力使用，可以保留接口但 BotTrader 不再使用。
+
+不要做无关重构。
+
+---
+
+# Task 3：成交价格改为 referencePrice clamp
+
+**文件：**
+
+- 修改：`apps/server/src/matchingEngine.test.ts`
+- 修改：`apps/server/src/matchingEngine.ts`
+
+- [ ] **步骤 1（RED）：高价 BUY 不得把成交价拉到 5000**
+
+测试：
+
+```text
+referencePrice = 1500
+resting BUY 5000
+incoming SELL 1498
+
+预期 Trade.price = 1500
+```
+
+- [ ] **步骤 2（RED）：低价 SELL 不得把成交价打到 1**
+
+测试：
+
+```text
+referencePrice = 1500
+resting SELL 1
+incoming BUY 1495
+
+预期 Trade.price = 1495
+```
+
+- [ ] **步骤 3（GREEN）：实现简单 clamp**
+
+对生产股票：
+
+```typescript
+const buyPrice = buyOrder.price
+const sellPrice = sellOrder.price
+const reference = store.stocks.get(symbol)!.referencePrice
+
+const tradePrice = Number(
+  Math.min(buyPrice, Math.max(sellPrice, reference)).toFixed(2)
+)
+```
+
+要求：
+
+- 只有 `buyPrice >= sellPrice` 才成交；
+- tradePrice 永远落在 `[sellPrice, buyPrice]`；
+- referencePrice 在区间内时取 referencePrice；
+- 不增加用户报价限制。
+
+原有：
+
+- price priority；
+- time priority；
+- partial fill；
+
+继续保持。
+
+旧的“resting-order price”测试和文档需要按新的明确产品规则更新，不能一边保留旧断言一边实现新语义。
+
+---
+
+# Task 4：Bot 未成交订单自动过期
+
+**文件：**
+
+- 修改：`apps/server/src/types.ts`
+- 修改：`apps/server/src/tradingService.ts`
+- 修改：`apps/server/src/botTrader.ts`
+- 修改：对应测试
+
+为了避免 Bot 每秒生成订单后无限堆积：
+
+新增：
+
+```text
+OrderStatus:
+PENDING
+PARTIALLY_FILLED
+FILLED
+CANCELLED
+```
+
+提供统一服务函数：
+
+```typescript
+cancelOrder(store, userId, orderId)
+```
+
+取消规则：
+
+- 只能取消自己的活动订单；
+- PENDING / PARTIALLY_FILLED 可以取消；
+- FILLED / CANCELLED 不能重复取消；
+- 从真实 order book 移除；
+- status = CANCELLED；
+- 已经成交的部分不回滚；
+- remainingQuantity 保留；
+- 不创建 Trade。
+
+BotTrader 每个 tick 先清理：
+
+```text
+创建超过 8~10 秒且仍活动的 Bot 订单
+→ cancelOrder()
+```
+
+用户订单**不自动过期**。
+
+同时修复：
+
+- CANCELLED SELL 不再占用可卖数量；
+- marketView 不显示 CANCELLED；
+- 前端 active order 判断排除 CANCELLED。
+
+---
+
+# Task 5：增加用户主动取消委托
+
+**文件：**
+
+- 修改：`apps/server/src/routes.ts`
+- 修改：`apps/server/src/routes.test.ts`
+- 修改：`apps/server/src/websocketHub.ts`
+- 修改：`apps/web/src/App.vue`
+- 修改：`apps/web/src/types.ts`
+
+- [ ] **步骤 1（RED）：服务端取消测试**
+
+新增接口，推荐：
+
+```text
+POST /api/orders/:orderId/cancel
+```
+
+body：
+
+```json
+{
+  "userId": "..."
+}
+```
+
+测试：
+
+1. PENDING 可以取消；
+2. PARTIALLY_FILLED 可以取消剩余部分；
+3. 已成交部分不回滚；
+4. 不能取消别人的订单；
+5. FILLED 不能取消；
+6. 重复取消返回明确错误。
+
+- [ ] **步骤 2：取消后实时推送**
+
+取消成功后：
+
+- 当前用户 `user:update`；
+- 对该 symbol 广播新的 `orderbook:update`。
+
+不需要新建复杂 WebSocket 事件。
+
+- [ ] **步骤 3：前端增加“取消”按钮**
+
+“当前委托”中每一条活动订单增加：
+
+```text
+取消
+```
+
+点击后调用取消接口。
+
+取消成功：
+
+- 当前委托立即消失；
+- 盘口立即刷新；
+- 已经成交的数量 / 持仓 / 资金不回滚。
+
+---
+
+# Task 6：盘口与实时刷新
+
+**文件：**
+
+- 检查：`apps/server/src/marketView.ts`
+- 检查：`apps/server/src/websocketHub.ts`
+- 检查：`apps/web/src/components/OrderBookPanel.vue`
+
+保持现有简单规则：
+
+```text
+asks：真实活动卖单按价格升序聚合，取前 5 档
+bids：真实活动买单按价格降序聚合，取前 5 档
+```
+
+不在前端伪造数据。
+
+实时变化来源：
+
+- Bot 随机下单；
+- 用户下单；
+- 真实成交；
+- 用户取消；
+- Bot 超时取消。
+
+都应最终让页面看到最新 order book。
+
+允许某一刻：
+
+```text
+5 asks + 3 bids
+2 asks + 5 bids
+0 asks + 4 bids
+```
+
+不要再强制“始终必须 5+5”。
+
+---
+
+# Task 7：关键产品行为测试
+
+至少增加/调整以下测试：
+
+- [ ] Bot tick 对三只股票都产生 BUY / SELL。
+- [ ] Bot 价格位于 referencePrice 附近约 ±0.5%。
+- [ ] Bot 订单仍通过 submitOrder / MatchingEngine。
+- [ ] 多 tick 后旧 Bot 活动订单会自动 CANCELLED，不无限积累。
+- [ ] 盘口 asks 升序、bids 降序，只返回前 5 档。
+- [ ] BUY 5000 不被拒绝。
+- [ ] 有正常卖盘时 BUY 5000 能真实成交。
+- [ ] 极端 BUY 后成交价不会因为 resting order 规则变成 5000。
+- [ ] SELL 1 不被拒绝。
+- [ ] SELL 1 的成交价不会被打到 1（除非双方限价区间只允许该价）。
+- [ ] latestPrice = 最新真实 Trade.price。
+- [ ] PENDING 用户订单可以取消。
+- [ ] PARTIALLY_FILLED 可以取消剩余部分。
+- [ ] CANCELLED 不进入盘口。
+- [ ] CANCELLED SELL 不占用可卖数量。
+- [ ] 用户不能取消别人的订单。
+- [ ] 原 price priority / time priority / partial fill 继续通过。
+
+---
+
+# Task 8：文档更新
+
+更新：
+
+- `README.md`
+- `docs/requirements.md`
+- `docs/architecture.md`
+- `docs/ai-collaboration.md`
+
+最终架构说明保持简单：
+
+```text
+MarketSimulator
+  -> referencePrice 每秒随机变化
+
+BotTrader
+  -> 每股每秒随机生成 BUY / SELL
+  -> 价格在 referencePrice 附近
+  -> submitOrder
+
+User
+  -> 自由限价
+  -> submitOrder
+  -> 可取消未成交剩余
+
+MatchingEngine
+  -> price priority
+  -> time priority
+  -> partial fill
+  -> tradePrice = clamp(referencePrice, sellLimit, buyLimit)
+
+OrderBook
+  -> 真实活动订单
+  -> 前端只展示 Top 5
+
+Bot old orders
+  -> 8~10 秒未成交自动取消
+```
+
+AI 协作记录应写明：
+
+```text
+Task 6D 第一版 Maker/Taker/固定 5 档方案被人工认为过度复杂。
+最终收敛为“随机真实订单 + Top 5 展示 + Bot 订单过期 + 用户撤单”的简单模拟市场。
+```
+
+---
+
+# Task 9：验证
+
+必须执行：
+
+```bash
+npm test
+npm run build
+git diff --check
+npm run dev
+```
+
+通过正常 Harness hook 刷新 `.oh-my-harness/tree.md`，不要手工编辑。
+
+## 浏览器验收 A：随机市场
+
+观察至少 15 秒：
+
+- 三只股票都有实时订单变化；
+- 有真实成交持续产生；
+- 盘口买卖档位会增加、减少、变化；
+- 不要求始终正好 5+5；
+- 页面只显示每侧最优前 5 档；
+- Bot 旧订单不会无限堆积。
+
+## 浏览器验收 B：高价 BUY
+
+当卖盘存在时提交：
+
+```text
+BUY 5000 x 100
+```
+
+要求：
+
+- 不因价格过高被拒绝；
+- 正常吃卖盘；
+- Trade.price 位于买卖双方都接受的范围内且接近 referencePrice；
+- latestPrice 跟随真实成交。
+
+如果当时确实没有卖盘：
+
+- 订单允许 PENDING；
+- 后续可以继续等待；
+- 用户可以手动取消。
+
+## 浏览器验收 C：取消订单
+
+提交一个不容易立即成交的 BUY 或 SELL。
+
+确认：
+
+- 当前委托出现；
+- 点击“取消”；
+- status 变为 CANCELLED；
+- 当前委托消失；
+- 盘口同步变化；
+- 已成交部分不回滚。
+
+## 浏览器验收 D：部分成交后取消
+
+制造 PARTIALLY_FILLED：
+
+- 已成交部分保留；
+- 点击取消后只取消 remainingQuantity；
+- cash / position 保持已成交结果；
+- 剩余不再参与撮合。
+
+---
+
+## 完成条件
+
+- [ ] 不再实现 Maker/Taker 固定 5×5 复杂模型。
+- [ ] referencePrice 继续随机游走。
+- [ ] 每只股票每秒随机生成 BUY 和 SELL。
+- [ ] Bot/用户统一走 submitOrder -> MatchingEngine。
+- [ ] 盘口来自真实 order book，并只展示 Top 5。
+- [ ] 用户报价完全自由。
+- [ ] 极端限价不会仅因 resting-order price 把成交价直接带到 5000 / 1。
+- [ ] 用户可以取消 PENDING / PARTIALLY_FILLED 剩余。
+- [ ] Bot 旧订单自动过期，用户订单不自动过期。
+- [ ] CANCELLED 订单不再参与盘口、撮合或 SELL reservation。
+- [ ] WebSocket 实时更新下单、成交、取消后的盘口。
 - [ ] npm test 通过。
 - [ ] npm run build 通过。
 - [ ] git diff --check 通过。
-- [ ] 真实浏览器 15 秒持续盘口 + 成交验收通过。
+- [ ] 浏览器随机市场 / 高价 BUY / 取消 / 部分成交取消验收通过。
 - [ ] 用户最终产品验收通过。
-- [ ] 之后才进入最终 Harness Review Gate。
-
-## 明确不做
-
-- 不限制用户价格。
-- 不把 5000 BUY / 1 SELL 判非法。
-- 不做真实 A 股涨跌停。
-- 不做市价单。
-- 不新增用户撤单 UI（系统 Bot 内部允许为 recenter 撤自己的旧 quote）。
-- 不引入数据库、Redis、MQ、微服务。
-- 不在前端伪造盘口或成交。
-- 不直接 push Trade。
-- 不改变普通用户的 MatchingEngine 默认成交规则。
+- [ ] 之后才进入 Harness Review Gate。
 
 ## Stop condition
 
-Task 6D 实现、自动测试和真实浏览器验收完成后，继续 push 到 `feat/trading-experience`，让 PR #4 自动更新。保持 PR OPEN，不自行合并。用户最终产品验收通过后，再进入 Harness 最终 Review Gate。
+完成 Task 6D 实现、自动测试和浏览器验收后，继续 push 到 `feat/trading-experience`，更新 PR #4 的真实结果。保持 PR OPEN，不自行合并；用户最终验收前不要进入最终 Review Gate。
