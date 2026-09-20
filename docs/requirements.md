@@ -322,3 +322,32 @@ Research 阶段只输出：
 不写业务代码。
 
 后续建议使用一个 Implementation PR 完成 MVP，并在该 PR 中按计划分阶段实现、测试和审查。
+# 第二阶段补充
+
+交易体验升级增加中国股票展示、独立买卖面板、有限价格历史、派生盘口和模拟 Bot。SELL 不允许卖出当前持仓减活动卖单占用后的可卖数量；该规则由服务端最终执行。
+
+最新价语义：没有真实成交时保持不变；真实成交后等于该股票最后一笔成交价。行情 tick 只广播当前价，不单独随机改写价格。
+## Task 6C 价格与流动性
+
+- 系统为每只股票维护独立 `referencePrice`，每秒小幅随机游走。
+- 用户限价不受参考价范围限制；SELL 仍受持仓约束。
+- Bot 每秒围绕参考价提供普通限价流动性，和用户订单使用同一撮合规则。
+- 真实 `Trade.price` 仍由 resting-order price 决定，`latestPrice` 仍等于该股票最近真实成交价。
+## Task 6D 随机订单与撤单
+
+- Bot 每秒对每只股票随机生成 2~4 笔 BUY 与 2~4 笔 SELL，数量为 10/20/50/100，价格约在 `referencePrice ±0.5%`。
+- Bot 与用户统一经过 `submitOrder -> MatchingEngine`；未成交订单进入真实订单簿。
+- 真实盘口按 asks 升序、bids 降序聚合并展示前 5 档，不强制填满。
+- Bot 活动订单约 9 秒未完全成交自动取消；用户可取消 PENDING/PARTIALLY_FILLED 剩余部分。
+- 买价 >= 卖价时成交；成交价为已在订单簿中的 resting order / maker price。`referencePrice` 只用于模拟市场中心和 Bot 报价参考，不参与 Trade.price 计算。
+## Task 6E 展示规则
+
+- 我的订单包含当前股票的全部订单状态，取消后的部分成交订单仍保留真实成交摘要。
+- 市场成交按股票分别保留/返回最新 20 条，前端按时间倒序展示。
+- SELL UI 不显示可卖数量；服务端 `availableToSell` 和 SELL reservation 继续阻止超卖。
+## Task 6F 现金与时间规则
+
+- `availableCash = cash - Σ(active BUY price × remainingQuantity)`，活动 BUY 仅为 PENDING/PARTIALLY_FILLED。
+- 资金不足的 BUY 在创建订单前整笔拒绝；挂单不直接扣 cash，真实成交按 Trade 金额扣款。
+- CANCELLED/FILLED BUY 不再占用购买力；SELL 继续使用持仓 reservation。
+- 服务端保留 ISO 时间，前端统一按本地 `YYYY-MM-DD HH:mm:ss` 展示。

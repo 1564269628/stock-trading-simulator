@@ -1,4 +1,5 @@
 import { matchOrder } from './matchingEngine.js'
+import type { MatchOptions } from './matchingEngine.js'
 import type { MemoryStore } from './store.js'
 import type { Order, OrderSide } from './types.js'
 
@@ -9,12 +10,16 @@ export function createUser(store: MemoryStore, username: string, password: strin
   store.users.set(user.id, user); store.positions.set(user.id, new Map()); return user
 }
 
-export function submitOrder(store: MemoryStore, input: { userId: string; symbol: string; side: OrderSide; price: number; quantity: number }) {
+export interface SubmitOrderOptions { matchOptions?: MatchOptions }
+
+export function submitOrder(store: MemoryStore, input: { userId: string; symbol: string; side: OrderSide; price: number; quantity: number }, options?: SubmitOrderOptions) {
   if (!store.users.has(input.userId) || !store.stocks.has(input.symbol)) throw new Error('invalid user or symbol')
   if ((input.side !== 'BUY' && input.side !== 'SELL') || typeof input.price !== 'number' || !Number.isFinite(input.price) || input.price <= 0 || typeof input.quantity !== 'number' || !Number.isFinite(input.quantity) || !Number.isInteger(input.quantity) || input.quantity <= 0) throw new Error('invalid order')
+  if (input.side === 'BUY' && input.price * input.quantity > availableCash(store, input.userId)) throw new Error('insufficient cash')
+  if (input.side === 'SELL' && input.quantity > availableToSell(store, input.userId, input.symbol)) throw new Error('insufficient position')
   const order: Order = { id: `order-${store.nextSequence()}`, ...input, remainingQuantity: input.quantity, status: 'PENDING', sequence: store.sequence, createdAt: new Date().toISOString() }
   store.orders.set(order.id, order)
-  const trades = matchOrder(store, order)
+  const trades = matchOrder(store, order, options?.matchOptions)
   store.trades.push(...trades)
   for (const trade of trades) {
     const buyer = store.users.get(trade.buyerId)!; const seller = store.users.get(trade.sellerId)!
@@ -23,5 +28,40 @@ export function submitOrder(store: MemoryStore, input: { userId: string; symbol:
     buyerPositions.set(trade.symbol, (buyerPositions.get(trade.symbol) ?? 0) + trade.quantity)
     sellerPositions.set(trade.symbol, (sellerPositions.get(trade.symbol) ?? 0) - trade.quantity)
   }
+  if (trades.length > 0) {
+    const latestTrade = trades[trades.length - 1]; const stock = store.stocks.get(latestTrade.symbol)!
+    stock.latestPrice = latestTrade.price
+    stock.changePercent = Number((((stock.latestPrice - stock.initialPrice) / stock.initialPrice) * 100).toFixed(2))
+    const history = store.priceHistory.get(stock.symbol) ?? []
+    history.push({ timestamp: latestTrade.createdAt, price: latestTrade.price }); store.priceHistory.set(stock.symbol, history.slice(-90))
+  }
   return { order, trades }
+}
+
+export function cancelOrder(store: MemoryStore, userId: string, orderId: string) {
+  const order = store.orders.get(orderId)
+  if (!order || order.userId !== userId) throw new Error('cannot cancel this order')
+  if (order.status !== 'PENDING' && order.status !== 'PARTIALLY_FILLED') throw new Error('order cannot be cancelled')
+  const book = store.getOrderBook(order.symbol)
+  const ownBook = order.side === 'BUY' ? book.buys : book.sells
+  const index = ownBook.findIndex(item => item.id === order.id)
+  if (index >= 0) ownBook.splice(index, 1)
+  order.status = 'CANCELLED'
+  return order
+}
+
+function availableToSell(store: MemoryStore, userId: string, symbol: string) {
+  const held = store.positions.get(userId)?.get(symbol) ?? 0
+  const reserved = [...store.orders.values()]
+    .filter(order => order.userId === userId && order.symbol === symbol && order.side === 'SELL' && (order.status === 'PENDING' || order.status === 'PARTIALLY_FILLED'))
+    .reduce((sum, order) => sum + order.remainingQuantity, 0)
+  return held - reserved
+}
+
+function availableCash(store: MemoryStore, userId: string) {
+  const user = store.users.get(userId)!
+  const reserved = [...store.orders.values()]
+    .filter(order => order.userId === userId && order.side === 'BUY' && (order.status === 'PENDING' || order.status === 'PARTIALLY_FILLED'))
+    .reduce((sum, order) => sum + order.price * order.remainingQuantity, 0)
+  return user.cash - reserved
 }

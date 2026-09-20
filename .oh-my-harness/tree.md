@@ -3,7 +3,7 @@
 Use this file for navigation only. Verify implementation details by reading source files directly.
 
 - Source: `git ls-files --cached --others --exclude-standard`
-- Entries: 62
+- Entries: 82
 
 ```text
 ./
@@ -53,31 +53,55 @@ Use this file for navigation only. Verify implementation details by reading sour
 ├── apps/
 │   ├── server/
 │   │   ├── src/
+│   │   │   ├── botTrader.test.ts
+│   │   │   ├── botTrader.ts
+│   │   │   ├── marketSimulator.test.ts
 │   │   │   ├── marketSimulator.ts
+│   │   │   ├── marketView.test.ts
+│   │   │   ├── marketView.ts
 │   │   │   ├── matchingEngine.test.ts
 │   │   │   ├── matchingEngine.ts
 │   │   │   ├── routes.test.ts
 │   │   │   ├── routes.ts
 │   │   │   ├── server.ts
 │   │   │   ├── store.ts
+│   │   │   ├── tradeView.ts
 │   │   │   ├── tradingService.test.ts
 │   │   │   ├── tradingService.ts
 │   │   │   ├── types.ts
+│   │   │   ├── websocketHub.test.ts
 │   │   │   └── websocketHub.ts
 │   │   ├── package.json
 │   │   └── tsconfig.json
 │   └── web/
 │       ├── src/
+│       │   ├── components/
+│       │   │   ├── OrderBookPanel.vue
+│       │   │   └── PriceChart.vue
 │       │   ├── services/
 │       │   │   ├── api.ts
 │       │   │   └── websocket.ts
+│       │   ├── utils/
+│       │   │   └── formatDateTime.ts
 │       │   ├── App.vue
-│       │   └── main.ts
+│       │   ├── main.ts
+│       │   ├── styles.css
+│       │   └── types.ts
 │       ├── index.html
 │       ├── package.json
 │       ├── tsconfig.json
 │       └── vite.config.ts
 ├── docs/
+│   ├── harness/
+│   │   └── plans/
+│   │       ├── 2026-09-20-cash-reservation-time-format-plan.md
+│   │       ├── 2026-09-20-latest-price-trade-consistency-plan.md
+│   │       ├── 2026-09-20-order-history-market-trades-ui-plan.md
+│   │       ├── 2026-09-20-persistent-orderbook-liquidity-plan.md
+│   │       ├── 2026-09-20-reference-price-active-liquidity-plan.md
+│   │       ├── 2026-09-20-resting-order-price-plan.md
+│   │       ├── 2026-09-20-trading-experience-manual-acceptance-fixes.md
+│   │       └── 2026-09-20-trading-experience-plan.md
 │   ├── specs/
 │   │   ├── agent-workflow.md
 │   │   └── review-guidelines.md

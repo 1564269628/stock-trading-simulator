@@ -369,3 +369,27 @@ Research PR 完成后：
 可以概括为：
 
 > 我没有让 AI 一次把项目全部生成出来。先用 Research PR 把题目约束、撮合规则和架构边界固定下来，再把实现拆成小任务。撮合引擎是风险最高的部分，所以我要求先写价格优先、时间优先和部分成交测试，再实现代码。AI 负责提高生成和排查效率，但最终是否接受修改是根据测试结果和需求文档决定的。
+# 第二阶段协作记录
+
+本轮按 Implementation Plan 分 Task 实现：Task 2 先写 SELL 规则测试并确认 RED，再以最小服务端校验实现 GREEN；Task 3 使用真实 WebSocket 客户端验证行情事件；Task 5 为 Bot 和盘口补充行为测试；最终通过 npm test、build 和 dev smoke 验证。
+
+Task 6B 根据产品验收发现的价格语义问题，先用成交驱动最新价测试确认 RED，再让 TradingService 在真实成交后同步 `latestPrice/changePercent/priceHistory`；随后用行情采样测试确认 MarketSimulator 不得随机改价，最终以 REST 一致性测试锁定三者语义相同。
+# Task 6A 人工验收修复记录
+
+真实浏览器验收发现股票上下文和成交语义混杂；本轮按修复计划将 `selectedSymbol` 统一应用到交易工作区，拆分 `marketTrades` / `myTrades`，并用真实 Trade 关联计算多次成交订单的成交量、金额和加权均价。随后使用两个本地浏览器窗口验证股票切换、真实买入成交和公共市场成交实时更新。
+## Task 6C
+
+浏览器验收发现流动性不足时，高价用户买单可能被 Bot 以极端 maker price 成交。最终方案保留用户自由限价，引入独立 `referencePrice`、每秒 Bot 流动性，以及仅作用于 Bot 路径的 ±2% 资格带；真实成交仍由原撮合引擎产生。
+## Task 6D
+
+人工验收后，Maker/Taker、固定 5×5、top-up/recenter 方案被收敛为简单模型：referencePrice 随机变化，Bot 随机提交真实 BUY/SELL，真实订单簿展示 Top 5，Bot 旧订单自动过期，用户可以撤单。后续产品验收发现 clamp 成交价与题目中的 resting-order 语义冲突，因此恢复为价格优先、时间优先下的 maker price：谁先挂单就按谁的限价成交。
+## Task 6E
+
+完成订单历史和市场成交展示优化：REST/WebSocket 每只股票提供最新 20 条市场成交；“我的订单”保留取消及部分成交历史并按真实 Trade 计算摘要；卖出面板删除可卖数量显示，但后端风控不变。
+## Task 6F
+
+用户验收发现大额 BUY 可以使现金变负，根因是 BUY 路径缺少购买力校验。本轮增加对称的 active BUY reservation：资金不足整笔拒绝，挂单不扣现金，成交按真实金额结算，取消释放剩余购买力；同时统一前端时间显示为本地秒级格式。
+
+## Task 6G
+
+用户先挂 SELL 1111、随后 BUY 1500 时，Task 6D 的 referencePrice clamp 曾产生约 1478.18 的成交价。最终决定恢复更直观的 resting order price；referencePrice 只保留为模拟市场中心和 Bot 报价参考。

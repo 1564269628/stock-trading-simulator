@@ -625,3 +625,17 @@ WebSocket：
 可以概括为：
 
 > 我用了一个 Vue 3 前端和一个 Express 后端。后端把用户、订单簿、持仓和成交都放在内存里；REST 负责登录、获取状态和下单，独立的撮合引擎按价格优先、时间优先处理限价单，成交后更新资金持仓，再通过 WebSocket 把行情和交易状态实时推给前端。
+# 第二阶段架构增量
+
+`MemoryStore.priceHistory` 为每只股票保留最近 90 个 `PricePoint`；行情通过 REST 快照和 WebSocket 增量事件提供。`marketView.ts` 只从现有活动订单簿聚合盘口，不保存第二份订单簿。`botTrader.ts` 创建普通 User 并周期性调用 `submitOrder`，因此仍经过卖出持仓校验、撮合与记账。
+
+Task 6B 后，`Stock.latestPrice` 只由真实成交的最后一个 `Trade.price` 更新；MarketSimulator 只采样并广播该价格，不再生成独立随机价格。成交同时追加有界价格历史并重新计算涨跌幅。
+## Task 6C 价格数据流
+
+`MarketSimulator -> referencePrice`（每秒随机游走）；`referencePrice -> BotTrader 报价参考`。用户订单与 Bot 订单都继续经过 `TradingService -> MatchingEngine -> Trade`，成交后才更新现金、持仓、`latestPrice`、历史与 WebSocket。用户订单不接受 referencePrice 价格校验。
+## Task 6D 订单生命周期
+
+`referencePrice -> Bot 随机 BUY/SELL -> submitOrder -> MatchingEngine -> Trade 或真实 OrderBook`。撮合按价格优先、时间优先，成交价为对手方 resting order / maker price；referencePrice 不参与 Trade.price。Bot 超时和用户主动撤单都通过统一 `cancelOrder` 从真实订单簿移除并保留已成交部分。WebSocket 继续复用 `user:update`、`trade:new`、`orderbook:update`。
+## Task 6F 现金 reservation
+
+TradingService 在创建 BUY 前计算活动 BUY 的 `price × remainingQuantity` reservation；不足则整笔拒绝。现金只在真实 Trade 后扣减，取消活动 BUY 自动释放剩余 reservation。时间以 ISO 存储，由 Web UI 统一格式化为本地秒级时间。

@@ -7,16 +7,21 @@ const updateStatus = (order: Order) => {
   order.status = order.remainingQuantity === 0 ? 'FILLED' : order.remainingQuantity < order.quantity ? 'PARTIALLY_FILLED' : 'PENDING'
 }
 
-export function matchOrder(store: MemoryStore, incoming: Order): Trade[] {
+export interface MatchOptions { canMatch?: (resting: Order) => boolean }
+
+export function matchOrder(store: MemoryStore, incoming: Order, options?: MatchOptions): Trade[] {
   const book = store.getOrderBook(incoming.symbol)
   const opposite = incoming.side === 'BUY' ? book.sells : book.buys
   sortBook(opposite, incoming.side === 'BUY' ? 'SELL' : 'BUY')
   const trades: Trade[] = []
 
   while (incoming.remainingQuantity > 0 && opposite.length > 0) {
-    const resting = opposite[0]
-    const crosses = incoming.side === 'BUY' ? resting.price <= incoming.price : resting.price >= incoming.price
-    if (!crosses) break
+    const restingIndex = opposite.findIndex(resting => {
+      const crosses = incoming.side === 'BUY' ? resting.price <= incoming.price : resting.price >= incoming.price
+      return crosses && (options?.canMatch?.(resting) ?? true)
+    })
+    if (restingIndex < 0) break
+    const resting = opposite[restingIndex]
     const quantity = Math.min(incoming.remainingQuantity, resting.remainingQuantity)
     const trade: Trade = {
       tradeId: `trade-${store.nextSequence()}`,
@@ -33,7 +38,7 @@ export function matchOrder(store: MemoryStore, incoming: Order): Trade[] {
     resting.remainingQuantity -= quantity
     updateStatus(incoming); updateStatus(resting)
     trades.push(trade)
-    if (resting.remainingQuantity === 0) opposite.shift()
+    if (resting.remainingQuantity === 0) opposite.splice(restingIndex, 1)
   }
 
   if (incoming.remainingQuantity > 0) {
