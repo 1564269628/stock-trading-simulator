@@ -1,4 +1,4 @@
-import type { Order, OrderBook, Stock, Trade, User } from './types.js'
+import type { Order, OrderBook, PricePoint, Stock, Trade, User } from './types.js'
 
 export class MemoryStore {
   users = new Map<string, User>()
@@ -11,6 +11,7 @@ export class MemoryStore {
   orderBooks = new Map<string, OrderBook>()
   positions = new Map<string, Map<string, number>>()
   trades: Trade[] = []
+  priceHistory = new Map<string, PricePoint[]>()
   sequence = 0
 
   nextSequence() { return ++this.sequence }
@@ -19,4 +20,5 @@ export class MemoryStore {
     if (!book) { book = { buys: [], sells: [] }; this.orderBooks.set(symbol, book) }
     return book
   }
+  constructor() { this.stocks.forEach(stock => this.priceHistory.set(stock.symbol, [{ timestamp: new Date().toISOString(), price: stock.latestPrice }])) }
 }

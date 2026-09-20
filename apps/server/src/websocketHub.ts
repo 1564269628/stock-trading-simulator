@@ -11,11 +11,12 @@ export function createWebSocketHub(server: Server, store: MemoryStore) {
     socket.on('close', () => clients.get(userId)?.delete(socket))
   })
   return {
-    broadcastMarket: () => broadcast({ type: 'market:update', data: [...store.stocks.values()] }),
+    broadcastMarket: (points: unknown) => broadcast({ type: 'market:update', data: { stocks: [...store.stocks.values()], points } }),
     broadcastTrade: (trade: unknown) => broadcast({ type: 'trade:new', data: trade }),
     sendTradeUsers: (trade: { buyerId: string; sellerId: string }) => {
       sendUser(trade.buyerId); sendUser(trade.sellerId)
     },
+    publishOrderResult: (result: { order: { userId: string }; trades: Array<{ buyerId: string; sellerId: string }> }) => { sendUser(result.order.userId); result.trades.forEach(trade => { broadcast({ type: 'trade:new', data: trade }); sendUser(trade.buyerId); sendUser(trade.sellerId) }) },
     sendUser
   }
   function sendUser(userId: string) {
