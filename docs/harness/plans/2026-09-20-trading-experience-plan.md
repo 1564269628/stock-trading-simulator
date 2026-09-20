@@ -1,5 +1,16 @@
 # Trading Experience Upgrade Implementation Plan
 
+## 实际执行状态（2026-09-20）
+
+- [x] Task 1：交易终端骨架与中国股票数据
+- [x] Task 2：持仓与卖出规则（TDD GREEN）
+- [x] Task 3：多窗口实时状态同步核心路径
+- [x] Task 4：价格历史与 SVG 折线图
+- [x] Task 5：模拟交易 Bot 与简单盘口
+- [x] Task 6：UI polish、文档与自动化验证
+- [ ] 真实双浏览器窗口完整验收
+- [ ] Harness Review Gate
+
 > **For agentic workers:** 步骤使用复选框（`- [ ]`）语法进行跟踪。  
 > 前置基线：MVP PR #3 已合并到 `main`；本轮基于 `fb721200c7153ec42881aec935087a3f657e31ea`。  
 > 实现分支：`feat/trading-experience`。  
