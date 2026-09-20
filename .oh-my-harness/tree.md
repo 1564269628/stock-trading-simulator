@@ -3,7 +3,7 @@
 Use this file for navigation only. Verify implementation details by reading source files directly.
 
 - Source: `git ls-files --cached --others --exclude-standard`
-- Entries: 62
+- Entries: 71
 
 ```text
 ./
@@ -53,7 +53,11 @@ Use this file for navigation only. Verify implementation details by reading sour
 ├── apps/
 │   ├── server/
 │   │   ├── src/
+│   │   │   ├── botTrader.test.ts
+│   │   │   ├── botTrader.ts
 │   │   │   ├── marketSimulator.ts
+│   │   │   ├── marketView.test.ts
+│   │   │   ├── marketView.ts
 │   │   │   ├── matchingEngine.test.ts
 │   │   │   ├── matchingEngine.ts
 │   │   │   ├── routes.test.ts
@@ -68,16 +72,24 @@ Use this file for navigation only. Verify implementation details by reading sour
 │   │   └── tsconfig.json
 │   └── web/
 │       ├── src/
+│       │   ├── components/
+│       │   │   ├── OrderBookPanel.vue
+│       │   │   └── PriceChart.vue
 │       │   ├── services/
 │       │   │   ├── api.ts
 │       │   │   └── websocket.ts
 │       │   ├── App.vue
-│       │   └── main.ts
+│       │   ├── main.ts
+│       │   ├── styles.css
+│       │   └── types.ts
 │       ├── index.html
 │       ├── package.json
 │       ├── tsconfig.json
 │       └── vite.config.ts
 ├── docs/
+│   ├── harness/
+│   │   └── plans/
+│   │       └── 2026-09-20-trading-experience-plan.md
 │   ├── specs/
 │   │   ├── agent-workflow.md
 │   │   └── review-guidelines.md

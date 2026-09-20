@@ -52,3 +52,16 @@ apps/web/src/
 4. 每次测试失败先读取错误并定位根因：例如缺失 `matchingEngine.ts` 的红灯和 WebSocket TypeScript 语法错误，均做单点修复后重新验证。
 
 AI 生成的代码不会替代人工验收；最终以测试、构建和真实 REST/WebSocket 联调结果为准。
+# 第二阶段交易体验
+
+当前实现包含 600519 贵州茅台、000858 五粮液、300750 宁德时代，支持交易终端式股票切换、独立 BUY/SELL、最多 90 个价格历史点的 SVG 实时折线图、5 档派生盘口和普通 Bot 流动性。
+
+卖出订单由服务端校验：可卖数量等于当前持仓减去同股票未成交卖单的 remainingQuantity。Bot 与普通用户共用 `submitOrder -> MatchingEngine`，不直接创建成交或修改订单簿。
+
+验证命令：
+
+```bash
+npm test
+npm run build
+npm run dev
+```

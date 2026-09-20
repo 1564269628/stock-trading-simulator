@@ -625,3 +625,6 @@ WebSocket：
 可以概括为：
 
 > 我用了一个 Vue 3 前端和一个 Express 后端。后端把用户、订单簿、持仓和成交都放在内存里；REST 负责登录、获取状态和下单，独立的撮合引擎按价格优先、时间优先处理限价单，成交后更新资金持仓，再通过 WebSocket 把行情和交易状态实时推给前端。
+# 第二阶段架构增量
+
+`MemoryStore.priceHistory` 为每只股票保留最近 90 个 `PricePoint`；行情通过 REST 快照和 WebSocket 增量事件提供。`marketView.ts` 只从现有活动订单簿聚合盘口，不保存第二份订单簿。`botTrader.ts` 创建普通 User 并周期性调用 `submitOrder`，因此仍经过卖出持仓校验、撮合与记账。

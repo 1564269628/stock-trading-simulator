@@ -369,3 +369,6 @@ Research PR 完成后：
 可以概括为：
 
 > 我没有让 AI 一次把项目全部生成出来。先用 Research PR 把题目约束、撮合规则和架构边界固定下来，再把实现拆成小任务。撮合引擎是风险最高的部分，所以我要求先写价格优先、时间优先和部分成交测试，再实现代码。AI 负责提高生成和排查效率，但最终是否接受修改是根据测试结果和需求文档决定的。
+# 第二阶段协作记录
+
+本轮按 Implementation Plan 分 Task 实现：Task 2 先写 SELL 规则测试并确认 RED，再以最小服务端校验实现 GREEN；Task 3 使用真实 WebSocket 客户端验证行情事件；Task 5 为 Bot 和盘口补充行为测试；最终通过 npm test、build 和 dev smoke 验证。
