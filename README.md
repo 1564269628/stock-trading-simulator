@@ -42,7 +42,7 @@ apps/web/src/
   services/            # REST 与 WebSocket 客户端
 ```
 
-新订单主动吃对手盘：买单匹配最低卖价，卖单匹配最高买价；同价按递增 sequence 保证时间优先；成交价使用已在订单簿中的 resting order 价格。资金和持仓只在成交后记账，不实现冻结、卖空限制或生产级认证。
+新订单主动吃对手盘：买单匹配最低卖价，卖单匹配最高买价；同价按递增 sequence 保证时间优先；成交价使用已在订单簿中的 resting order 价格。资金和持仓只在成交后记账，活动 BUY/SELL 分别占用购买力与持仓 reservation，不实现生产级认证。
 
 ## AI 协作记录
 

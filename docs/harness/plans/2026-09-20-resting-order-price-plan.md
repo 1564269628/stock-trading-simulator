@@ -16,6 +16,8 @@
 
 resting order / maker price 已恢复，clamp 专用测试已移除并替换为先卖后买、先买后卖断言；Task 6F 购买力、Task 6D Bot、Task 6E 展示回归保持通过。浏览器验收待执行。
 
+独立审查收口：MarketSimulator 已将采样点写入服务端 90 点 priceHistory；盘口卖档编号已修正；新增真实 WebSocket integration test；Vue 补丁符号残留已清理。当前全量测试为 37/37，用户最终验收和 Review Gate 仍未完成。
+
 ---
 
 ## 1. 最终成交价规则
@@ -130,7 +132,7 @@ Trade.price
 - 修改：`apps/server/src/matchingEngine.test.ts`
 - 修改：`apps/server/src/matchingEngine.ts`
 
-- [ ] **步骤 1（RED）：先卖后买**
+- [x] **步骤 1（RED）：先卖后买**
 
 新增/明确测试：
 
@@ -150,7 +152,7 @@ it('uses the resting ask price when a later buy crosses it', () => {
 
 当前 clamp 实现预期 RED，因为 referencePrice 约 1500 时会返回接近 referencePrice，而不是 1111。
 
-- [ ] **步骤 2（RED）：先买后卖**
+- [x] **步骤 2（RED）：先买后卖**
 
 ```typescript
 it('uses the resting bid price when a later sell crosses it', () => {
@@ -166,7 +168,7 @@ it('uses the resting bid price when a later sell crosses it', () => {
 })
 ```
 
-- [ ] **步骤 3（GREEN）：最小修改成交价**
+- [x] **步骤 3（GREEN）：最小修改成交价**
 
 将当前：
 
@@ -459,20 +461,20 @@ BUY 5000 x 100
 
 ## 8. 完成条件
 
-- [ ] MatchingEngine 不再使用 referencePrice 计算 Trade.price。
-- [ ] Trade.price 永远等于本次匹配的 resting order.price。
-- [ ] 先 SELL 1111 后 BUY 1500 -> 1111 成交。
-- [ ] 先 BUY 1500 后 SELL 1111 -> 1500 成交。
-- [ ] price priority 不变。
-- [ ] time priority 不变。
-- [ ] partial fill / multi-fill 不变。
-- [ ] BUY 购买力校验不回归。
-- [ ] cash / positions 按真实 resting-price Trade 正确结算。
-- [ ] referencePrice 继续只用于随机市场 / Bot 报价。
-- [ ] README / requirements / architecture 不再保留 clamp 冲突描述。
-- [ ] npm test 通过。
-- [ ] npm run build 通过。
-- [ ] git diff --check 通过。
+- [x] MatchingEngine 不再使用 referencePrice 计算 Trade.price。
+- [x] Trade.price 永远等于本次匹配的 resting order.price。
+- [x] 先 SELL 1111 后 BUY 1500 -> 1111 成交。
+- [x] 先 BUY 1500 后 SELL 1111 -> 1500 成交。
+- [x] price priority 不变。
+- [x] time priority 不变。
+- [x] partial fill / multi-fill 不变。
+- [x] BUY 购买力校验不回归。
+- [x] cash / positions 按真实 resting-price Trade 正确结算。
+- [x] referencePrice 继续只用于随机市场 / Bot 报价。
+- [x] README / requirements / architecture 不再保留 clamp 冲突描述。
+- [x] npm test 通过。
+- [x] npm run build 通过。
+- [x] git diff --check 通过。
 - [ ] 浏览器顺序成交验收通过。
 - [ ] 用户最终产品验收后再进入 Harness Review Gate。
 

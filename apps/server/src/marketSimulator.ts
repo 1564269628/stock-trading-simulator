@@ -9,6 +9,8 @@ export function advanceMarket(store: MemoryStore, random: () => number = Math.ra
       const moveRate = (random() * 2 - 1) * REFERENCE_MOVE_RATE
       stock.referencePrice = Number(Math.max(0.01, stock.referencePrice * (1 + moveRate)).toFixed(2))
     const point = { timestamp: new Date().toISOString(), price: stock.latestPrice }
+    const history = store.priceHistory.get(stock.symbol) ?? []
+    store.priceHistory.set(stock.symbol, [...history, point].slice(-90))
     points[stock.symbol] = point
   })
   return points
