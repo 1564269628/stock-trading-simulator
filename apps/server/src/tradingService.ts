@@ -11,7 +11,7 @@ export function createUser(store: MemoryStore, username: string, password: strin
 
 export function submitOrder(store: MemoryStore, input: { userId: string; symbol: string; side: OrderSide; price: number; quantity: number }) {
   if (!store.users.has(input.userId) || !store.stocks.has(input.symbol)) throw new Error('invalid user or symbol')
-  if (input.price <= 0 || !Number.isInteger(input.quantity) || input.quantity <= 0) throw new Error('invalid price or quantity')
+  if ((input.side !== 'BUY' && input.side !== 'SELL') || typeof input.price !== 'number' || !Number.isFinite(input.price) || input.price <= 0 || typeof input.quantity !== 'number' || !Number.isFinite(input.quantity) || !Number.isInteger(input.quantity) || input.quantity <= 0) throw new Error('invalid order')
   const order: Order = { id: `order-${store.nextSequence()}`, ...input, remainingQuantity: input.quantity, status: 'PENDING', sequence: store.sequence, createdAt: new Date().toISOString() }
   store.orders.set(order.id, order)
   const trades = matchOrder(store, order)

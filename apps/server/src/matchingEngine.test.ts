@@ -26,4 +26,13 @@ describe('matching engine', () => {
     const store = new MemoryStore(); const ask = order('ask', 'SELL', 11, 10, 1); store.getOrderBook('AAPL').sells.push(ask); const incoming = order('buy', 'BUY', 10, 2, 2)
     expect(matchOrder(store, incoming)).toHaveLength(0); expect(store.getOrderBook('AAPL').buys).toContain(incoming)
   })
+  it('uses highest bid and resting bid price for incoming sells', () => {
+    const store = new MemoryStore(); const low = order('low', 'BUY', 9, 5, 1); const high = order('high', 'BUY', 10, 5, 2)
+    store.getOrderBook('AAPL').buys.push(low, high); const incoming = order('sell', 'SELL', 8, 5, 3); const trades = matchOrder(store, incoming)
+    expect(trades[0]).toMatchObject({ buyOrderId: 'high', sellOrderId: 'sell', buyerId: 'high-user', sellerId: 'sell-user', price: 10, quantity: 5 }); expect(incoming.status).toBe('FILLED'); expect(high.status).toBe('FILLED')
+  })
+  it('keeps a non-crossing incoming sell pending', () => {
+    const store = new MemoryStore(); const bid = order('bid', 'BUY', 9, 5, 1); store.getOrderBook('AAPL').buys.push(bid); const incoming = order('sell', 'SELL', 10, 5, 2)
+    expect(matchOrder(store, incoming)).toHaveLength(0); expect(incoming.status).toBe('PENDING'); expect(store.getOrderBook('AAPL').sells).toContain(incoming)
+  })
 })

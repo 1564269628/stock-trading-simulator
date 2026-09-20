@@ -11,7 +11,11 @@ describe('REST API', () => {
     expect(register.status).toBe(201); const account = await register.json() as { userId: string }
     expect((await fetch(`${url}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'alice', password: 'pw' }) })).status).toBe(200)
     expect((await fetch(`${url}/state?userId=${account.userId}`)).status).toBe(200)
-    const invalid = await fetch(`${url}/orders`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: account.userId, symbol: 'AAPL', side: 'BUY', price: 0, quantity: 1 }) })
-    expect(invalid.status).toBe(400); await new Promise<void>(resolve => server.close(() => resolve()))
+    const invalid = async (body: unknown) => fetch(`${url}/orders`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: account.userId, symbol: 'AAPL', ...body as object }) })
+    expect((await invalid({ side: 'HOLD', price: 10, quantity: 1 })).status).toBe(400)
+    expect((await invalid({ side: 'BUY', price: 'abc', quantity: 1 })).status).toBe(400)
+    expect((await invalid({ side: 'BUY', price: 10, quantity: 1.5 })).status).toBe(400)
+    expect((await invalid({ side: 'BUY', price: Infinity, quantity: 1 })).status).toBe(400)
+    await new Promise<void>(resolve => server.close(() => resolve()))
   })
 })
