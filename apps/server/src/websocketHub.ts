@@ -1,6 +1,7 @@
 import type { Server } from 'node:http'
 import { WebSocketServer, WebSocket } from 'ws'
 import type { MemoryStore } from './store.js'
+import { getOrderBookSnapshot } from './marketView.js'
 
 export function createWebSocketHub(server: Server, store: MemoryStore) {
   const hub = new WebSocketServer({ server, path: '/ws' })
@@ -16,7 +17,7 @@ export function createWebSocketHub(server: Server, store: MemoryStore) {
     sendTradeUsers: (trade: { buyerId: string; sellerId: string }) => {
       sendUser(trade.buyerId); sendUser(trade.sellerId)
     },
-    publishOrderResult: (result: { order: { userId: string }; trades: Array<{ buyerId: string; sellerId: string }> }) => { sendUser(result.order.userId); result.trades.forEach(trade => { broadcast({ type: 'trade:new', data: trade }); sendUser(trade.buyerId); sendUser(trade.sellerId) }) },
+    publishOrderResult: (result: { order: { userId: string; symbol: string }; trades: Array<{ buyerId: string; sellerId: string }> }) => { sendUser(result.order.userId); result.trades.forEach(trade => { broadcast({ type: 'trade:new', data: trade }); sendUser(trade.buyerId); sendUser(trade.sellerId) }); broadcast({ type: 'orderbook:update', data: getOrderBookSnapshot(store, result.order.symbol) }) },
     sendUser
   }
   function sendUser(userId: string) {
