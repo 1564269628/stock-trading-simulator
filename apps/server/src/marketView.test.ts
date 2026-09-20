@@ -9,6 +9,6 @@ describe('market view', () => {
     for (const price of [12, 11, 11, 10, 9, 8, 7]) submitOrder(store, { userId: a.id, symbol: '600519', side: 'SELL', price, quantity: price === 11 ? 2 : 1 })
     for (const price of [1, 2, 2, 3, 4, 5, 6]) submitOrder(store, { userId: b.id, symbol: '600519', side: 'BUY', price, quantity: price === 2 ? 3 : 1 })
     const snapshot = getOrderBookSnapshot(store, '600519', 5)
-    expect(snapshot.asks.map(level => level.price)).toEqual([7, 8, 9, 10, 11]); expect(snapshot.bids.map(level => level.price)).toEqual([6, 5, 4, 3, 2]); expect(snapshot.asks.find(level => level.price === 11)).toMatchObject({ quantity: 3, orderCount: 2 }); expect(snapshot.bids.find(level => level.price === 2)).toMatchObject({ quantity: 4, orderCount: 2 })
+    expect(snapshot.asks.map(level => level.price)).toEqual([7, 8, 9, 10, 11]); expect(snapshot.bids.map(level => level.price)).toEqual([6, 5, 4, 3, 2]); expect(snapshot.asks.find(level => level.price === 11)).toMatchObject({ quantity: 4, orderCount: 2 }); expect(snapshot.bids.find(level => level.price === 2)).toMatchObject({ quantity: 6, orderCount: 2 })
   })
 })
