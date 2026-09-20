@@ -24,6 +24,13 @@ export function submitOrder(store: MemoryStore, input: { userId: string; symbol:
     buyerPositions.set(trade.symbol, (buyerPositions.get(trade.symbol) ?? 0) + trade.quantity)
     sellerPositions.set(trade.symbol, (sellerPositions.get(trade.symbol) ?? 0) - trade.quantity)
   }
+  if (trades.length > 0) {
+    const latestTrade = trades[trades.length - 1]; const stock = store.stocks.get(latestTrade.symbol)!
+    stock.latestPrice = latestTrade.price
+    stock.changePercent = Number((((stock.latestPrice - stock.initialPrice) / stock.initialPrice) * 100).toFixed(2))
+    const history = store.priceHistory.get(stock.symbol) ?? []
+    history.push({ timestamp: latestTrade.createdAt, price: latestTrade.price }); store.priceHistory.set(stock.symbol, history.slice(-90))
+  }
   return { order, trades }
 }
 

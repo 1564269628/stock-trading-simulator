@@ -35,4 +35,18 @@ describe('trading service', () => {
     const result = submitOrder(store, { userId: seller.id, symbol: '600519', side: 'SELL', price: 10, quantity: 4 })
     expect(result.trades).toHaveLength(1); expect(store.positions.get(seller.id)?.get('600519')).toBe(1); expect(result.order.status).toBe('FILLED')
   })
+  it('updates the stock latest price from the latest real execution', () => {
+    const store = new MemoryStore(); const buyer = createUser(store, 'price-buyer', 'pw'); const sellerOne = createUser(store, 'price-seller-one', 'pw'); const sellerTwo = createUser(store, 'price-seller-two', 'pw')
+    store.positions.get(sellerOne.id)!.set('600519', 1); store.positions.get(sellerTwo.id)!.set('600519', 1)
+    submitOrder(store, { userId: sellerOne.id, symbol: '600519', side: 'SELL', price: 1499, quantity: 1 })
+    submitOrder(store, { userId: sellerTwo.id, symbol: '600519', side: 'SELL', price: 1501, quantity: 1 })
+    const result = submitOrder(store, { userId: buyer.id, symbol: '600519', side: 'BUY', price: 1502, quantity: 2 })
+    expect(result.trades.map(trade => trade.price)).toEqual([1499, 1501])
+    const stock = store.stocks.get('600519')!; expect(stock.latestPrice).toBe(1501); expect(stock.changePercent).toBe(0.07); expect(store.priceHistory.get('600519')?.at(-1)?.price).toBe(1501)
+  })
+  it('does not change the stock latest price when an order does not trade', () => {
+    const store = new MemoryStore(); const buyer = createUser(store, 'pending-price-buyer', 'pw'); const stock = store.stocks.get('600519')!; const beforePrice = stock.latestPrice; const beforeHistoryLength = store.priceHistory.get('600519')!.length
+    const result = submitOrder(store, { userId: buyer.id, symbol: '600519', side: 'BUY', price: 1400, quantity: 1 })
+    expect(result.trades).toHaveLength(0); expect(stock.latestPrice).toBe(beforePrice); expect(store.priceHistory.get('600519')).toHaveLength(beforeHistoryLength)
+  })
 })
