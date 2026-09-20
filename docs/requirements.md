@@ -331,7 +331,7 @@ Research 阶段只输出：
 
 - 系统为每只股票维护独立 `referencePrice`，每秒小幅随机游走。
 - 用户限价不受参考价范围限制；SELL 仍受持仓约束。
-- Bot 每秒围绕参考价提供普通限价流动性，并只主动撮合参考价 ±2% 内的 resting order。
+- Bot 每秒围绕参考价提供普通限价流动性，和用户订单使用同一撮合规则。
 - 真实 `Trade.price` 仍由 resting-order price 决定，`latestPrice` 仍等于该股票最近真实成交价。
 ## Task 6D 随机订单与撤单
 
@@ -339,7 +339,7 @@ Research 阶段只输出：
 - Bot 与用户统一经过 `submitOrder -> MatchingEngine`；未成交订单进入真实订单簿。
 - 真实盘口按 asks 升序、bids 降序聚合并展示前 5 档，不强制填满。
 - Bot 活动订单约 9 秒未完全成交自动取消；用户可取消 PENDING/PARTIALLY_FILLED 剩余部分。
-- 成交价为 `clamp(referencePrice, sellLimit, buyLimit)`，`latestPrice` 仍只来自真实成交。
+- 买价 >= 卖价时成交；成交价为已在订单簿中的 resting order / maker price。`referencePrice` 只用于模拟市场中心和 Bot 报价参考，不参与 Trade.price 计算。
 ## Task 6E 展示规则
 
 - 我的订单包含当前股票的全部订单状态，取消后的部分成交订单仍保留真实成交摘要。

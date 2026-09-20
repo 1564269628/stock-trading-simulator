@@ -635,7 +635,7 @@ Task 6B 后，`Stock.latestPrice` 只由真实成交的最后一个 `Trade.price
 `MarketSimulator -> referencePrice`（每秒随机游走）；`referencePrice -> BotTrader 报价与 Bot 专用资格带`。用户订单与 Bot 订单都继续经过 `TradingService -> MatchingEngine -> Trade`，成交后才更新现金、持仓、`latestPrice`、历史与 WebSocket。用户订单不接受参考价校验，Bot 资格带不是用户交易规则。
 ## Task 6D 订单生命周期
 
-`referencePrice -> Bot 随机 BUY/SELL -> submitOrder -> MatchingEngine -> Trade 或真实 OrderBook`。撮合成交价为 `clamp(referencePrice, sellLimit, buyLimit)`；Bot 超时和用户主动撤单都通过统一 `cancelOrder` 从真实订单簿移除并保留已成交部分。WebSocket 继续复用 `user:update`、`trade:new`、`orderbook:update`。
+`referencePrice -> Bot 随机 BUY/SELL -> submitOrder -> MatchingEngine -> Trade 或真实 OrderBook`。撮合按价格优先、时间优先，成交价为对手方 resting order / maker price；referencePrice 不参与 Trade.price。Bot 超时和用户主动撤单都通过统一 `cancelOrder` 从真实订单簿移除并保留已成交部分。WebSocket 继续复用 `user:update`、`trade:new`、`orderbook:update`。
 ## Task 6F 现金 reservation
 
 TradingService 在创建 BUY 前计算活动 BUY 的 `price × remainingQuantity` reservation；不足则整笔拒绝。现金只在真实 Trade 后扣减，取消活动 BUY 自动释放剩余 reservation。时间以 ISO 存储，由 Web UI 统一格式化为本地秒级时间。

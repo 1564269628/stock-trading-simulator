@@ -12,6 +12,10 @@
 
 **Scope:** 本轮只修改成交价语义、对应测试和稳定文档；不重新设计 referencePrice、Bot 随机订单、盘口 Top 5、撤单、购买力 reservation、时间格式和 WebSocket。
 
+## 当前实现状态（2026-09-20）
+
+resting order / maker price 已恢复，clamp 专用测试已移除并替换为先卖后买、先买后卖断言；Task 6F 购买力、Task 6D Bot、Task 6E 展示回归保持通过。浏览器验收待执行。
+
 ---
 
 ## 1. 最终成交价规则

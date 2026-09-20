@@ -6,6 +6,16 @@ import type { Order, OrderSide } from './types.js'
 const order = (id: string, side: OrderSide, price: number, quantity: number, sequence: number): Order => ({ id, userId: id + '-user', symbol: 'AAPL', side, price, quantity, remainingQuantity: quantity, status: 'PENDING', sequence, createdAt: new Date(sequence).toISOString() })
 
 describe('matching engine', () => {
+  it('uses the resting ask price when a later buy crosses it', () => {
+    const store = new MemoryStore(); const restingSell = { ...order('sell', 'SELL', 1111, 50, 1), symbol: '600519' }; store.getOrderBook('600519').sells.push(restingSell)
+    const trades = matchOrder(store, { ...order('buy', 'BUY', 1500, 50, 2), symbol: '600519' })
+    expect(trades).toHaveLength(1); expect(trades[0].price).toBe(1111)
+  })
+  it('uses the resting bid price when a later sell crosses it', () => {
+    const store = new MemoryStore(); const restingBuy = { ...order('buy', 'BUY', 1500, 50, 1), symbol: '600519' }; store.getOrderBook('600519').buys.push(restingBuy)
+    const trades = matchOrder(store, { ...order('sell', 'SELL', 1111, 50, 2), symbol: '600519' })
+    expect(trades).toHaveLength(1); expect(trades[0].price).toBe(1500)
+  })
   it('uses price priority for incoming buys', () => {
     const store = new MemoryStore(); const cheap = order('cheap', 'SELL', 9.5, 10, 1); const expensive = order('expensive', 'SELL', 10, 10, 2)
     store.getOrderBook('AAPL').sells.push(expensive, cheap); const incoming = order('buy', 'BUY', 10, 10, 3)
@@ -45,15 +55,5 @@ describe('matching engine', () => {
     store.getOrderBook('AAPL').buys.push(extreme, normal)
     const trades = matchOrder(store, order('sell', 'SELL', 1499, 1, 3), { canMatch: resting => resting.price <= 1530 })
     expect(trades[0].buyOrderId).toBe('normal'); expect(extreme.remainingQuantity).toBe(2)
-  })
-  it('clamps an extreme resting bid trade to reference price', () => {
-    const store = new MemoryStore(); const bid = { ...order('extreme', 'BUY', 5000, 2, 1), symbol: '600519' }; store.getOrderBook('600519').buys.push(bid)
-    const trades = matchOrder(store, { ...order('sell', 'SELL', 1498, 1, 2), symbol: '600519' })
-    expect(trades[0].price).toBe(1500)
-  })
-  it('clamps an extreme resting ask trade to the incoming buy limit', () => {
-    const store = new MemoryStore(); const ask = { ...order('extreme', 'SELL', 1, 2, 1), symbol: '600519' }; store.getOrderBook('600519').sells.push(ask)
-    const trades = matchOrder(store, { ...order('buy', 'BUY', 1495, 1, 2), symbol: '600519' })
-    expect(trades[0].price).toBe(1495)
   })
 })

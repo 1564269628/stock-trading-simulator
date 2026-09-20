@@ -382,10 +382,14 @@ Task 6B 根据产品验收发现的价格语义问题，先用成交驱动最新
 浏览器验收发现流动性不足时，高价用户买单可能被 Bot 以极端 maker price 成交。最终方案保留用户自由限价，引入独立 `referencePrice`、每秒 Bot 流动性，以及仅作用于 Bot 路径的 ±2% 资格带；真实成交仍由原撮合引擎产生。
 ## Task 6D
 
-人工验收后，Maker/Taker、固定 5×5、top-up/recenter 方案被收敛为简单模型：referencePrice 随机变化，Bot 随机提交真实 BUY/SELL，真实订单簿展示 Top 5，Bot 旧订单自动过期，用户可以撤单。为避免极端限价影响成交价，撮合采用 `clamp(referencePrice, sellLimit, buyLimit)`。
+人工验收后，Maker/Taker、固定 5×5、top-up/recenter 方案被收敛为简单模型：referencePrice 随机变化，Bot 随机提交真实 BUY/SELL，真实订单簿展示 Top 5，Bot 旧订单自动过期，用户可以撤单。后续产品验收发现 clamp 成交价与题目中的 resting-order 语义冲突，因此恢复为价格优先、时间优先下的 maker price：谁先挂单就按谁的限价成交。
 ## Task 6E
 
 完成订单历史和市场成交展示优化：REST/WebSocket 每只股票提供最新 20 条市场成交；“我的订单”保留取消及部分成交历史并按真实 Trade 计算摘要；卖出面板删除可卖数量显示，但后端风控不变。
 ## Task 6F
 
 用户验收发现大额 BUY 可以使现金变负，根因是 BUY 路径缺少购买力校验。本轮增加对称的 active BUY reservation：资金不足整笔拒绝，挂单不扣现金，成交按真实金额结算，取消释放剩余购买力；同时统一前端时间显示为本地秒级格式。
+
+## Task 6G
+
+用户先挂 SELL 1111、随后 BUY 1500 时，Task 6D 的 referencePrice clamp 曾产生约 1478.18 的成交价。最终决定恢复更直观的 resting order price；referencePrice 只保留为模拟市场中心和 Bot 报价参考。

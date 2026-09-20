@@ -3,7 +3,7 @@
 Use this file for navigation only. Verify implementation details by reading source files directly.
 
 - Source: `git ls-files --cached --others --exclude-standard`
-- Entries: 80
+- Entries: 81
 
 ```text
 ./
@@ -98,6 +98,7 @@ Use this file for navigation only. Verify implementation details by reading sour
 │   │       ├── 2026-09-20-order-history-market-trades-ui-plan.md
 │   │       ├── 2026-09-20-persistent-orderbook-liquidity-plan.md
 │   │       ├── 2026-09-20-reference-price-active-liquidity-plan.md
+│   │       ├── 2026-09-20-resting-order-price-plan.md
 │   │       ├── 2026-09-20-trading-experience-manual-acceptance-fixes.md
 │   │       └── 2026-09-20-trading-experience-plan.md
 │   ├── specs/
