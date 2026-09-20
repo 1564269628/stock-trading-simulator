@@ -372,3 +372,6 @@ Research PR 完成后：
 # 第二阶段协作记录
 
 本轮按 Implementation Plan 分 Task 实现：Task 2 先写 SELL 规则测试并确认 RED，再以最小服务端校验实现 GREEN；Task 3 使用真实 WebSocket 客户端验证行情事件；Task 5 为 Bot 和盘口补充行为测试；最终通过 npm test、build 和 dev smoke 验证。
+# Task 6A 人工验收修复记录
+
+真实浏览器验收发现股票上下文和成交语义混杂；本轮按修复计划将 `selectedSymbol` 统一应用到交易工作区，拆分 `marketTrades` / `myTrades`，并用真实 Trade 关联计算多次成交订单的成交量、金额和加权均价。随后使用两个本地浏览器窗口验证股票切换、真实买入成交和公共市场成交实时更新。

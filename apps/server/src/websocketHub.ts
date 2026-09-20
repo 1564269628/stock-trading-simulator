@@ -22,7 +22,8 @@ export function createWebSocketHub(server: Server, store: MemoryStore) {
   }
   function sendUser(userId: string) {
     const user = store.users.get(userId)
-    const data = { cash: user?.cash, positions: Object.fromEntries(store.positions.get(userId) ?? []), orders: [...store.orders.values()].filter(order => order.userId === userId), recentTrades: store.trades.slice(-20) }
+    const marketTrades = store.trades.slice(-50); const myTrades = store.trades.filter(trade => trade.buyerId === userId || trade.sellerId === userId).slice(-100)
+    const data = { user: user ? { id: user.id, username: user.username, cash: user.cash } : undefined, cash: user?.cash, positions: Object.fromEntries(store.positions.get(userId) ?? []), orders: [...store.orders.values()].filter(order => order.userId === userId), marketTrades, myTrades, recentTrades: marketTrades }
     clients.get(userId)?.forEach(socket => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'user:update', data })) })
   }
   function broadcast(event: unknown) { hub.clients.forEach(socket => socket.readyState === WebSocket.OPEN && socket.send(JSON.stringify(event))) }

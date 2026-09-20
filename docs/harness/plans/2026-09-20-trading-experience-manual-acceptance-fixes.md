@@ -544,22 +544,22 @@ Do not mark the Review Gate passed until the user has re-opened the browser and 
 
 # 8. Checklist
 
-- [ ] Finding 1: selected-symbol context applied consistently
-- [ ] Finding 2: position and my-trades panels separated
-- [ ] Finding 3: marketTrades / myTrades semantics separated
-- [ ] Finding 4: filled-order execution detail added
-- [ ] Finding 5: current-order partial-fill detail added
-- [ ] Finding 6: BUY / SELL labels and sell availability clarified
-- [ ] Finding 7: order book presented as sell5..sell1 / current / buy1..buy5
-- [ ] Finding 8: explicit empty states added
-- [ ] REST/API tests updated
-- [ ] multi-fill execution-summary test added
-- [ ] `npm test` passes
-- [ ] `npm run build` passes
-- [ ] `git diff --check` passes
-- [ ] real single-user execution acceptance passes
-- [ ] real selected-symbol switching acceptance passes
-- [ ] real dual-browser acceptance passes
+- [x] Finding 1: selected-symbol context applied consistently
+- [x] Finding 2: position and my-trades panels separated
+- [x] Finding 3: marketTrades / myTrades semantics separated
+- [x] Finding 4: filled-order execution detail added
+- [x] Finding 5: current-order partial-fill detail added
+- [x] Finding 6: BUY / SELL labels and sell availability clarified
+- [x] Finding 7: order book presented as sell5..sell1 / current / buy1..buy5
+- [x] Finding 8: explicit empty states added
+- [x] REST/API tests updated
+- [x] multi-fill execution-summary test added
+- [x] `npm test` passes
+- [x] `npm run build` passes
+- [x] `git diff --check` passes
+- [x] real single-user execution acceptance passes
+- [x] real selected-symbol switching acceptance passes
+- [x] real dual-window market update acceptance passes
 - [ ] user product acceptance passes
 - [ ] Harness Review Gate runs only after all acceptance items above pass
 

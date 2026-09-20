@@ -4,4 +4,4 @@ export interface Trade { tradeId: string; symbol: string; price: number; quantit
 export interface PricePoint { timestamp: string; price: number }
 export interface OrderBookLevel { price: number; quantity: number; orderCount: number }
 export interface OrderBookSnapshot { symbol: string; asks: OrderBookLevel[]; bids: OrderBookLevel[] }
-export interface UserState { user: { id: string; username: string; cash: number }; stocks: Stock[]; orders: Order[]; positions: Record<string, number>; recentTrades: Trade[]; priceHistory: Record<string, PricePoint[]>; orderBooks: Record<string, OrderBookSnapshot> }
+export interface UserState { user: { id: string; username: string; cash: number }; stocks: Stock[]; orders: Order[]; positions: Record<string, number>; marketTrades: Trade[]; myTrades: Trade[]; recentTrades?: Trade[]; priceHistory: Record<string, PricePoint[]>; orderBooks: Record<string, OrderBookSnapshot> }

@@ -3,7 +3,7 @@
 Use this file for navigation only. Verify implementation details by reading source files directly.
 
 - Source: `git ls-files --cached --others --exclude-standard`
-- Entries: 71
+- Entries: 72
 
 ```text
 ./
@@ -89,6 +89,7 @@ Use this file for navigation only. Verify implementation details by reading sour
 ├── docs/
 │   ├── harness/
 │   │   └── plans/
+│   │       ├── 2026-09-20-trading-experience-manual-acceptance-fixes.md
 │   │       └── 2026-09-20-trading-experience-plan.md
 │   ├── specs/
 │   │   ├── agent-workflow.md
