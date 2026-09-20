@@ -19,6 +19,8 @@ describe('REST API', () => {
     const filled = await fetch(`${url}/orders`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: sellerAccount.userId, symbol: '600519', side: 'SELL', price: 10, quantity: 2 }) }); expect(filled.status).toBe(201)
     const buyerState = await (await fetch(`${url}/state?userId=${account.userId}`)).json() as { marketTrades: Array<unknown>; myTrades: Array<unknown> }; const sellerState = await (await fetch(`${url}/state?userId=${sellerAccount.userId}`)).json() as { marketTrades: Array<unknown>; myTrades: Array<unknown> }
     expect(buyerState.marketTrades).toHaveLength(1); expect(buyerState.myTrades).toHaveLength(1); expect(sellerState.marketTrades).toHaveLength(1); expect(sellerState.myTrades).toHaveLength(1)
+    const latestState = await (await fetch(`${url}/state?userId=${account.userId}`)).json() as { stocks: Array<{ symbol: string; latestPrice: number }>; marketTrades: Array<{ symbol: string; price: number }>; priceHistory: Record<string, Array<{ price: number }>> }
+    expect(latestState.stocks.find(stock => stock.symbol === '600519')?.latestPrice).toBe(latestState.marketTrades.at(-1)?.price); expect(latestState.priceHistory['600519'].at(-1)?.price).toBe(latestState.marketTrades.at(-1)?.price)
     expect((await fetch(`${url}/state?userId=${account.userId}`)).status).toBe(200)
     const state = await (await fetch(`${url}/state?userId=${account.userId}`)).json() as { marketTrades: unknown[]; myTrades: unknown[] }
     expect(state.marketTrades).toHaveLength(1); expect(state.myTrades).toHaveLength(1)

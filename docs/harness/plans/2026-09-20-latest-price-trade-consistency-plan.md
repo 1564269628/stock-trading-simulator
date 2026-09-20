@@ -1,5 +1,14 @@
 # Latest Price / Market Trade Consistency Implementation Plan
 
+## 实际执行状态（Task 6B）
+
+- [x] 真实成交驱动 `latestPrice`、`changePercent` 和 `priceHistory`
+- [x] 未成交挂单不改变最新价
+- [x] MarketSimulator 只采样/广播当前价，不再随机改价
+- [x] REST 最新价、最近成交和历史末点一致性测试
+- [x] `npm test`、`npm run build`、`git diff --check`
+- [ ] 用户最终产品验收
+
 > **For agentic workers:** 步骤使用复选框（- [ ]）语法进行跟踪。
 >
 > Follow-up plan for Implementation PR #4.
