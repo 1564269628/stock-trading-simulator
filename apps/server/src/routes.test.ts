@@ -9,7 +9,12 @@ describe('REST API', () => {
     const address = server.address() as { port: number }; const url = `http://127.0.0.1:${address.port}/api`
     const register = await fetch(`${url}/auth/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'alice', password: 'pw' }) })
     expect(register.status).toBe(201); const account = await register.json() as { userId: string }
+    const duplicate = await fetch(`${url}/auth/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'alice', password: 'pw' }) })
+    expect(duplicate.status).toBe(400)
     expect((await fetch(`${url}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'alice', password: 'pw' }) })).status).toBe(200)
+    expect((await fetch(`${url}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'alice', password: 'wrong' }) })).status).toBe(401)
+    const validOrder = await fetch(`${url}/orders`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: account.userId, symbol: 'AAPL', side: 'BUY', price: 10, quantity: 2 }) })
+    expect(validOrder.status).toBe(201); expect((await validOrder.json()).order).toMatchObject({ userId: account.userId, side: 'BUY', remainingQuantity: 2, status: 'PENDING' })
     expect((await fetch(`${url}/state?userId=${account.userId}`)).status).toBe(200)
     const invalid = async (body: unknown) => fetch(`${url}/orders`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: account.userId, symbol: 'AAPL', ...body as object }) })
     expect((await invalid({ side: 'HOLD', price: 10, quantity: 1 })).status).toBe(400)
