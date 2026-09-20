@@ -35,4 +35,15 @@ describe('matching engine', () => {
     const store = new MemoryStore(); const bid = order('bid', 'BUY', 9, 5, 1); store.getOrderBook('AAPL').buys.push(bid); const incoming = order('sell', 'SELL', 10, 5, 2)
     expect(matchOrder(store, incoming)).toHaveLength(0); expect(incoming.status).toBe('PENDING'); expect(store.getOrderBook('AAPL').sells).toContain(incoming)
   })
+  it('keeps unrestricted matching when no eligibility policy is supplied', () => {
+    const store = new MemoryStore(); const bid = order('extreme', 'BUY', 5000, 2, 1); store.getOrderBook('AAPL').buys.push(bid)
+    const trades = matchOrder(store, order('sell', 'SELL', 1500, 1, 2))
+    expect(trades[0].price).toBe(5000)
+  })
+  it('skips ineligible resting orders and finds the next eligible order', () => {
+    const store = new MemoryStore(); const extreme = order('extreme', 'BUY', 5000, 2, 1); const normal = order('normal', 'BUY', 1500, 2, 2)
+    store.getOrderBook('AAPL').buys.push(extreme, normal)
+    const trades = matchOrder(store, order('sell', 'SELL', 1499, 1, 3), { canMatch: resting => resting.price <= 1530 })
+    expect(trades[0].buyOrderId).toBe('normal'); expect(extreme.remainingQuantity).toBe(2)
+  })
 })

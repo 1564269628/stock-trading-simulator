@@ -3,7 +3,7 @@
 Use this file for navigation only. Verify implementation details by reading source files directly.
 
 - Source: `git ls-files --cached --others --exclude-standard`
-- Entries: 74
+- Entries: 75
 
 ```text
 ./
@@ -91,6 +91,7 @@ Use this file for navigation only. Verify implementation details by reading sour
 │   ├── harness/
 │   │   └── plans/
 │   │       ├── 2026-09-20-latest-price-trade-consistency-plan.md
+│   │       ├── 2026-09-20-reference-price-active-liquidity-plan.md
 │   │       ├── 2026-09-20-trading-experience-manual-acceptance-fixes.md
 │   │       └── 2026-09-20-trading-experience-plan.md
 │   ├── specs/

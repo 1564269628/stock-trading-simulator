@@ -630,3 +630,6 @@ WebSocket：
 `MemoryStore.priceHistory` 为每只股票保留最近 90 个 `PricePoint`；行情通过 REST 快照和 WebSocket 增量事件提供。`marketView.ts` 只从现有活动订单簿聚合盘口，不保存第二份订单簿。`botTrader.ts` 创建普通 User 并周期性调用 `submitOrder`，因此仍经过卖出持仓校验、撮合与记账。
 
 Task 6B 后，`Stock.latestPrice` 只由真实成交的最后一个 `Trade.price` 更新；MarketSimulator 只采样并广播该价格，不再生成独立随机价格。成交同时追加有界价格历史并重新计算涨跌幅。
+## Task 6C 价格数据流
+
+`MarketSimulator -> referencePrice`（每秒随机游走）；`referencePrice -> BotTrader 报价与 Bot 专用资格带`。用户订单与 Bot 订单都继续经过 `TradingService -> MatchingEngine -> Trade`，成交后才更新现金、持仓、`latestPrice`、历史与 WebSocket。用户订单不接受参考价校验，Bot 资格带不是用户交易规则。

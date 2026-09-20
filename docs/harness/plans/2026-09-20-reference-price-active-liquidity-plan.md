@@ -14,6 +14,10 @@
 >
 > 本计划是用户在 Task 6B 浏览器验收后的新产品决策。保留 Task 6B 的历史事实，不回写或伪造旧计划结果。本轮作为 Task 6C 继续在 PR #4 内实现，不新建 PR，不合并，不提前进入最终 Review Gate。
 
+## 当前实现状态（2026-09-20）
+
+服务端实现与自动验证已完成：`referencePrice`、Bot 专用资格带、三股票每秒流动性循环及相关回归测试已落地；`npm test` 25/25、`npm run build`、`git diff --check` 已通过。真实浏览器验收仍待执行，Task 7 checklist 不提前标记完成。
+
 **Goal:** 在不限制用户限价的前提下，引入后台随机游走的 `referencePrice` 作为市场中心，让 Bot 每秒围绕该参考价积极提供真实流动性并尽量产生真实成交；同时避免 Bot 主动与严重偏离参考价的极端挂单成交，从而防止单个用户仅靠一个离谱限价单把正常市场成交价长期带到极端位置。
 
 **Architecture:** `referencePrice` 与真实成交价职责分离：MarketSimulator 每秒只随机更新 `referencePrice`；用户订单仍然可以提交任意正数价格，不做价格范围校验；Bot 围绕 `referencePrice` 提交普通限价单，但 Bot 的撮合路径带一个仅用于系统流动性的“可成交价格带”策略，跳过参考价带外的对手挂单。真实 `Trade.price` 仍由 MatchingEngine 按 resting-order price 产生，`Stock.latestPrice` 仍由最近真实成交更新，因此顶部最新价、盘口当前价、市场成交和走势图继续保持真实成交语义。
