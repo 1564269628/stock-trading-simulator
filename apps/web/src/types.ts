@@ -1,0 +1,4 @@
+export interface Stock { symbol: string; name: string; initialPrice: number; latestPrice: number; changePercent: number }
+export interface Order { id: string; userId: string; symbol: string; side: 'BUY' | 'SELL'; price: number; quantity: number; remainingQuantity: number; status: 'PENDING' | 'PARTIALLY_FILLED' | 'FILLED'; createdAt: string }
+export interface Trade { tradeId: string; symbol: string; price: number; quantity: number; buyerId: string; sellerId: string; createdAt: string }
+export interface UserState { user: { id: string; username: string; cash: number }; stocks: Stock[]; orders: Order[]; positions: Record<string, number>; recentTrades: Trade[] }
