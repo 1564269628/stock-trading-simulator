@@ -46,4 +46,14 @@ describe('matching engine', () => {
     const trades = matchOrder(store, order('sell', 'SELL', 1499, 1, 3), { canMatch: resting => resting.price <= 1530 })
     expect(trades[0].buyOrderId).toBe('normal'); expect(extreme.remainingQuantity).toBe(2)
   })
+  it('clamps an extreme resting bid trade to reference price', () => {
+    const store = new MemoryStore(); const bid = { ...order('extreme', 'BUY', 5000, 2, 1), symbol: '600519' }; store.getOrderBook('600519').buys.push(bid)
+    const trades = matchOrder(store, { ...order('sell', 'SELL', 1498, 1, 2), symbol: '600519' })
+    expect(trades[0].price).toBe(1500)
+  })
+  it('clamps an extreme resting ask trade to the incoming buy limit', () => {
+    const store = new MemoryStore(); const ask = { ...order('extreme', 'SELL', 1, 2, 1), symbol: '600519' }; store.getOrderBook('600519').sells.push(ask)
+    const trades = matchOrder(store, { ...order('buy', 'BUY', 1495, 1, 2), symbol: '600519' })
+    expect(trades[0].price).toBe(1495)
+  })
 })

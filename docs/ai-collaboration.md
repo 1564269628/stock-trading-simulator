@@ -380,3 +380,6 @@ Task 6B 根据产品验收发现的价格语义问题，先用成交驱动最新
 ## Task 6C
 
 浏览器验收发现流动性不足时，高价用户买单可能被 Bot 以极端 maker price 成交。最终方案保留用户自由限价，引入独立 `referencePrice`、每秒 Bot 流动性，以及仅作用于 Bot 路径的 ±2% 资格带；真实成交仍由原撮合引擎产生。
+## Task 6D
+
+人工验收后，Maker/Taker、固定 5×5、top-up/recenter 方案被收敛为简单模型：referencePrice 随机变化，Bot 随机提交真实 BUY/SELL，真实订单簿展示 Top 5，Bot 旧订单自动过期，用户可以撤单。为避免极端限价影响成交价，撮合采用 `clamp(referencePrice, sellLimit, buyLimit)`。

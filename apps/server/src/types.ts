@@ -1,5 +1,5 @@
 export type OrderSide = 'BUY' | 'SELL'
-export type OrderStatus = 'PENDING' | 'PARTIALLY_FILLED' | 'FILLED'
+export type OrderStatus = 'PENDING' | 'PARTIALLY_FILLED' | 'FILLED' | 'CANCELLED'
 
 export interface User { id: string; username: string; password: string; cash: number; createdAt: string }
 export interface Stock { symbol: string; name: string; initialPrice: number; referencePrice: number; latestPrice: number; changePercent: number }

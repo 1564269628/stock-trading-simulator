@@ -26,7 +26,7 @@ export function matchOrder(store: MemoryStore, incoming: Order, options?: MatchO
     const trade: Trade = {
       tradeId: `trade-${store.nextSequence()}`,
       symbol: incoming.symbol,
-      price: resting.price,
+      price: Number(Math.min(incoming.side === 'BUY' ? incoming.price : resting.price, Math.max(incoming.side === 'BUY' ? resting.price : incoming.price, store.stocks.get(incoming.symbol)?.referencePrice ?? resting.price)).toFixed(2)),
       quantity,
       buyOrderId: incoming.side === 'BUY' ? incoming.id : resting.id,
       sellOrderId: incoming.side === 'SELL' ? incoming.id : resting.id,

@@ -37,10 +37,22 @@ export function submitOrder(store: MemoryStore, input: { userId: string; symbol:
   return { order, trades }
 }
 
+export function cancelOrder(store: MemoryStore, userId: string, orderId: string) {
+  const order = store.orders.get(orderId)
+  if (!order || order.userId !== userId) throw new Error('cannot cancel this order')
+  if (order.status !== 'PENDING' && order.status !== 'PARTIALLY_FILLED') throw new Error('order cannot be cancelled')
+  const book = store.getOrderBook(order.symbol)
+  const ownBook = order.side === 'BUY' ? book.buys : book.sells
+  const index = ownBook.findIndex(item => item.id === order.id)
+  if (index >= 0) ownBook.splice(index, 1)
+  order.status = 'CANCELLED'
+  return order
+}
+
 function availableToSell(store: MemoryStore, userId: string, symbol: string) {
   const held = store.positions.get(userId)?.get(symbol) ?? 0
   const reserved = [...store.orders.values()]
-    .filter(order => order.userId === userId && order.symbol === symbol && order.side === 'SELL' && order.status !== 'FILLED')
+    .filter(order => order.userId === userId && order.symbol === symbol && order.side === 'SELL' && (order.status === 'PENDING' || order.status === 'PARTIALLY_FILLED'))
     .reduce((sum, order) => sum + order.remainingQuantity, 0)
   return held - reserved
 }

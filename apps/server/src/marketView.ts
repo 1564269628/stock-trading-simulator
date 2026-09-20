@@ -6,7 +6,7 @@ export interface OrderBookSnapshot { symbol: string; asks: OrderBookLevel[]; bid
 function levels(orders: typeof Array.prototype, direction: 'asc' | 'desc', depth: number) {
   const grouped = new Map<number, OrderBookLevel>()
   for (const order of orders as any[]) {
-    if (order.status === 'FILLED' || order.remainingQuantity <= 0) continue
+    if (order.status === 'FILLED' || order.status === 'CANCELLED' || order.remainingQuantity <= 0) continue
     const level = grouped.get(order.price) ?? { price: order.price, quantity: 0, orderCount: 0 }
     level.quantity += order.remainingQuantity; level.orderCount += 1; grouped.set(order.price, level)
   }

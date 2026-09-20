@@ -14,6 +14,10 @@
 
 **Architecture:** 不再区分 Maker Bot / Taker Bot，也不要求系统强行维护固定 5×5 深度。Bot 就是普通模拟交易者，每秒随机下买单和卖单；价格交叉时自然产生真实成交，不交叉的订单自然留在订单簿。页面实时显示当前真实 Top 5。为避免极端用户限价成为 resting order 后把下一笔成交价格带到 5000 或 1，成交价改为“`referencePrice` 在买卖双方限价区间内的夹取值”：用户仍可任意报价，但成交价保持在双方都接受且接近模拟市场中心的位置。
 
+## 当前实现状态（2026-09-20）
+
+核心实现与自动验证已完成：随机 Bot、统一撮合、clamp 成交价、Bot 9 秒自动撤单、用户撤单 REST/UI、真实 Top 5 盘口均已落地；当前自动测试 28/28，构建通过。浏览器验收仍待执行，用户最终产品验收与 Review Gate 保持未完成。
+
 **Tech Stack:** TypeScript、Node.js、Express、Vitest、WebSocket、Vue 3、内存 MemoryStore。
 
 ---

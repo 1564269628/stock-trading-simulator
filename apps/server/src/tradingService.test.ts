@@ -15,7 +15,7 @@ describe('trading service', () => {
     submitOrder(store, { userId: sellerOne.id, symbol: '600519', side: 'SELL', price: 10, quantity: 3 })
     submitOrder(store, { userId: sellerTwo.id, symbol: '600519', side: 'SELL', price: 11, quantity: 4 })
     const result = submitOrder(store, { userId: buyer.id, symbol: '600519', side: 'BUY', price: 12, quantity: 10 })
-    expect(result.trades.map(trade => trade.quantity)).toEqual([3, 4]); expect(result.trades.map(trade => trade.price)).toEqual([10, 11]); expect(store.users.get(buyer.id)?.cash).toBe(999926); expect(store.positions.get(buyer.id)?.get('600519')).toBe(7); expect(store.positions.get(sellerOne.id)?.get('600519')).toBe(0); expect(store.positions.get(sellerTwo.id)?.get('600519')).toBe(0)
+    expect(result.trades.map(trade => trade.quantity)).toEqual([3, 4]); expect(result.trades.map(trade => trade.price)).toEqual([12, 12]); expect(store.users.get(buyer.id)?.cash).toBe(999916); expect(store.positions.get(buyer.id)?.get('600519')).toBe(7); expect(store.positions.get(sellerOne.id)?.get('600519')).toBe(0); expect(store.positions.get(sellerTwo.id)?.get('600519')).toBe(0)
   })
   it('rejects selling without position before creating an order', () => {
     const store = new MemoryStore(); const seller = createUser(store, 'empty-seller', 'pw')
@@ -41,7 +41,7 @@ describe('trading service', () => {
     submitOrder(store, { userId: sellerOne.id, symbol: '600519', side: 'SELL', price: 1499, quantity: 1 })
     submitOrder(store, { userId: sellerTwo.id, symbol: '600519', side: 'SELL', price: 1501, quantity: 1 })
     const result = submitOrder(store, { userId: buyer.id, symbol: '600519', side: 'BUY', price: 1502, quantity: 2 })
-    expect(result.trades.map(trade => trade.price)).toEqual([1499, 1501])
+    expect(result.trades.map(trade => trade.price)).toEqual([1500, 1501])
     const stock = store.stocks.get('600519')!; expect(stock.latestPrice).toBe(1501); expect(stock.changePercent).toBe(0.07); expect(store.priceHistory.get('600519')?.at(-1)?.price).toBe(1501)
   })
   it('does not change the stock latest price when an order does not trade', () => {

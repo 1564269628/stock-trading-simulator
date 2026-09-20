@@ -36,4 +36,15 @@ describe('REST API', () => {
     const trades = [{ tradeId: 't1', symbol: '600519', price: 10, quantity: 4, buyOrderId: order.id, sellOrderId: 's1', buyerId: 'user-1', sellerId: 'other', createdAt: '' }, { tradeId: 't2', symbol: '600519', price: 11, quantity: 6, buyOrderId: order.id, sellOrderId: 's2', buyerId: 'user-1', sellerId: 'other', createdAt: '' }]
     expect(summarizeExecution(order, trades)).toEqual({ filledQuantity: 10, executionAmount: 106, averageExecutionPrice: 10.6 })
   })
+  it('allows the owner to cancel a pending order and rejects other users', async () => {
+    const store = new MemoryStore(); const app = express(); app.use(express.json()); app.use('/api', createRoutes(store)); const server = app.listen(0)
+    const port = (server.address() as { port: number }).port; const url = `http://127.0.0.1:${port}/api`
+    const register = await fetch(`${url}/auth/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'cancel-owner', password: 'pw' }) }); const owner = await register.json() as { userId: string }
+    const otherResponse = await fetch(`${url}/auth/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'cancel-other', password: 'pw' }) }); const other = await otherResponse.json() as { userId: string }
+    const placed = await fetch(`${url}/orders`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: owner.userId, symbol: '600519', side: 'BUY', price: 1, quantity: 2 }) }); const order = (await placed.json()).order
+    expect((await fetch(`${url}/orders/${order.id}/cancel`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: other.userId }) })).status).toBe(400)
+    const cancelled = await fetch(`${url}/orders/${order.id}/cancel`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: owner.userId }) }); expect(cancelled.status).toBe(200); expect((await cancelled.json()).order.status).toBe('CANCELLED')
+    expect((await fetch(`${url}/orders/${order.id}/cancel`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: owner.userId }) })).status).toBe(400)
+    await new Promise<void>(resolve => server.close(() => resolve()))
+  })
 })

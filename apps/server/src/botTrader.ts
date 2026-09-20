@@ -1,10 +1,10 @@
-import { createUser, submitOrder } from './tradingService.js'
+import { cancelOrder, createUser, submitOrder } from './tradingService.js'
 import type { MemoryStore } from './store.js'
-import type { Stock } from './types.js'
 
-export const BOT_MATCH_BAND_RATE = 0.02
-export const BOT_QUOTE_OFFSET_RATE = 0.001
 export const BOT_TICK_MS = 1000
+export const BOT_ORDER_TTL_MS = 9000
+export const BOT_PRICE_RANGE = 0.005
+const quantities = [10, 20, 50, 100]
 
 export function initializeBots(store: MemoryStore) {
   const bots = ['market-bot-1', 'market-bot-2', 'market-bot-3'].map(name => createUser(store, name, 'bot'))
@@ -12,28 +12,32 @@ export function initializeBots(store: MemoryStore) {
   return bots
 }
 
-const quote = (stock: Stock, rate: number) => Number(Math.max(0.01, stock.referencePrice * (1 + rate)).toFixed(2))
-const eligible = (stock: Stock, price: number) => Math.abs(price - stock.referencePrice) / stock.referencePrice <= BOT_MATCH_BAND_RATE
+const randomCount = (random: () => number) => 2 + Math.floor(random() * 3)
+const randomQuantity = (random: () => number) => quantities[Math.floor(random() * quantities.length)]
+const randomPrice = (referencePrice: number, random: () => number) => Number(Math.max(0.01, referencePrice * (1 + (random() * 2 - 1) * BOT_PRICE_RANGE)).toFixed(2))
 
-export function runLiquidityCycle(store: MemoryStore, bots: ReturnType<typeof initializeBots>, symbol: string, random = Math.random) {
-  const stock = store.stocks.get(symbol)!; const quantity = 10; const results: ReturnType<typeof submitOrder>[] = []
-  const policy = { matchOptions: { canMatch: (resting: { price: number }) => eligible(stock, resting.price) } }
-  if (random() < 0.5) {
-    results.push(submitOrder(store, { userId: bots[0].id, symbol, side: 'SELL', price: quote(stock, BOT_QUOTE_OFFSET_RATE), quantity }, policy))
-    results.push(submitOrder(store, { userId: bots[1].id, symbol, side: 'BUY', price: quote(stock, BOT_QUOTE_OFFSET_RATE), quantity }, policy))
-  } else {
-    results.push(submitOrder(store, { userId: bots[0].id, symbol, side: 'BUY', price: quote(stock, -BOT_QUOTE_OFFSET_RATE), quantity }, policy))
-    results.push(submitOrder(store, { userId: bots[1].id, symbol, side: 'SELL', price: quote(stock, -BOT_QUOTE_OFFSET_RATE), quantity }, policy))
+export function expireBotOrders(store: MemoryStore, bots: ReturnType<typeof initializeBots>, now = Date.now()) {
+  const botIds = new Set(bots.map(bot => bot.id)); const expired = []
+  for (const order of store.orders.values()) {
+    if (botIds.has(order.userId) && (order.status === 'PENDING' || order.status === 'PARTIALLY_FILLED') && now - Date.parse(order.createdAt) >= BOT_ORDER_TTL_MS) expired.push(cancelOrder(store, order.userId, order.id))
+  }
+  return expired
+}
+
+export function runBotTick(store: MemoryStore, bots: ReturnType<typeof initializeBots>, random = Math.random) {
+  expireBotOrders(store, bots)
+  const results: ReturnType<typeof submitOrder>[] = []
+  for (const symbol of store.stocks.keys()) {
+    const stock = store.stocks.get(symbol)!; const buyCount = randomCount(random); const sellCount = randomCount(random)
+    for (let index = 0; index < buyCount; index++) results.push(submitOrder(store, { userId: bots[index % bots.length].id, symbol, side: 'BUY', price: randomPrice(stock.referencePrice, random), quantity: randomQuantity(random) }))
+    for (let index = 0; index < sellCount; index++) results.push(submitOrder(store, { userId: bots[(index + 1) % bots.length].id, symbol, side: 'SELL', price: randomPrice(stock.referencePrice, random), quantity: randomQuantity(random) }))
   }
   return results
 }
 
-export function runBotTick(store: MemoryStore, bots: ReturnType<typeof initializeBots>, random = Math.random) {
-  return [...store.stocks.keys()].flatMap(symbol => runLiquidityCycle(store, bots, symbol, random))
-}
-
 export function startBotTrader(store: MemoryStore, onOrderResult: (result: ReturnType<typeof submitOrder>) => void, intervalMs = BOT_TICK_MS) {
   const bots = initializeBots(store)
+  runBotTick(store, bots).forEach(onOrderResult)
   const timer = setInterval(() => runBotTick(store, bots).forEach(onOrderResult), intervalMs)
   return { bots, stop: () => clearInterval(timer) }
 }

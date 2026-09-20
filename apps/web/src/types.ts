@@ -1,5 +1,5 @@
 export interface Stock { symbol: string; name: string; initialPrice: number; latestPrice: number; changePercent: number }
-export interface Order { id: string; userId: string; symbol: string; side: 'BUY' | 'SELL'; price: number; quantity: number; remainingQuantity: number; status: 'PENDING' | 'PARTIALLY_FILLED' | 'FILLED'; createdAt: string }
+export interface Order { id: string; userId: string; symbol: string; side: 'BUY' | 'SELL'; price: number; quantity: number; remainingQuantity: number; status: 'PENDING' | 'PARTIALLY_FILLED' | 'FILLED' | 'CANCELLED'; createdAt: string }
 export interface Trade { tradeId: string; symbol: string; price: number; quantity: number; buyOrderId: string; sellOrderId: string; buyerId: string; sellerId: string; createdAt: string }
 export interface PricePoint { timestamp: string; price: number }
 export interface OrderBookLevel { price: number; quantity: number; orderCount: number }
