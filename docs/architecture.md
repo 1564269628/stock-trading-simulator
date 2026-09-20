@@ -636,3 +636,6 @@ Task 6B 后，`Stock.latestPrice` 只由真实成交的最后一个 `Trade.price
 ## Task 6D 订单生命周期
 
 `referencePrice -> Bot 随机 BUY/SELL -> submitOrder -> MatchingEngine -> Trade 或真实 OrderBook`。撮合成交价为 `clamp(referencePrice, sellLimit, buyLimit)`；Bot 超时和用户主动撤单都通过统一 `cancelOrder` 从真实订单簿移除并保留已成交部分。WebSocket 继续复用 `user:update`、`trade:new`、`orderbook:update`。
+## Task 6F 现金 reservation
+
+TradingService 在创建 BUY 前计算活动 BUY 的 `price × remainingQuantity` reservation；不足则整笔拒绝。现金只在真实 Trade 后扣减，取消活动 BUY 自动释放剩余 reservation。时间以 ISO 存储，由 Web UI 统一格式化为本地秒级时间。

@@ -1,8 +1,33 @@
 import { describe, expect, it } from 'vitest'
 import { MemoryStore } from './store.js'
-import { createUser, submitOrder } from './tradingService.js'
+import { cancelOrder, createUser, submitOrder } from './tradingService.js'
 
 describe('trading service', () => {
+  it('rejects a BUY that exceeds available cash before creating an order', () => {
+    const store = new MemoryStore(); const buyer = createUser(store, 'cash-buyer', 'pw'); buyer.cash = 1000
+    expect(() => submitOrder(store, { userId: buyer.id, symbol: '600519', side: 'BUY', price: 600, quantity: 2 })).toThrow('insufficient cash')
+    expect(store.orders.size).toBe(0); expect(buyer.cash).toBe(1000)
+  })
+  it('does not let multiple pending BUY orders reuse cash', () => {
+    const store = new MemoryStore(); const buyer = createUser(store, 'reserved-buyer', 'pw')
+    submitOrder(store, { userId: buyer.id, symbol: '600519', side: 'BUY', price: 1500, quantity: 500 })
+    expect(() => submitOrder(store, { userId: buyer.id, symbol: '600519', side: 'BUY', price: 1500, quantity: 500 })).toThrow('insufficient cash')
+    expect(buyer.cash).toBe(1_000_000); expect(store.orders.size).toBe(1)
+  })
+  it('releases pending BUY purchasing power after cancellation', () => {
+    const store = new MemoryStore(); const buyer = createUser(store, 'release-buyer', 'pw')
+    const first = submitOrder(store, { userId: buyer.id, symbol: '600519', side: 'BUY', price: 1500, quantity: 500 }).order
+    expect(() => submitOrder(store, { userId: buyer.id, symbol: '600519', side: 'BUY', price: 1500, quantity: 500 })).toThrow('insufficient cash')
+    cancelOrder(store, buyer.id, first.id)
+    expect(() => submitOrder(store, { userId: buyer.id, symbol: '600519', side: 'BUY', price: 1500, quantity: 500 })).not.toThrow()
+  })
+  it('keeps partial BUY reservation at limit price while cash tracks real fills', () => {
+    const store = new MemoryStore(); const buyer = createUser(store, 'partial-buyer', 'pw'); const seller = createUser(store, 'partial-seller', 'pw'); store.positions.get(seller.id)!.set('600519', 40)
+    const pending = submitOrder(store, { userId: buyer.id, symbol: '600519', side: 'BUY', price: 1500, quantity: 100 }).order
+    const result = submitOrder(store, { userId: seller.id, symbol: '600519', side: 'SELL', price: 1490, quantity: 40 })
+    expect(result.trades[0].price).toBe(1500); expect(pending.status).toBe('PARTIALLY_FILLED'); expect(pending.remainingQuantity).toBe(60); expect(buyer.cash).toBe(1_000_000 - 1500 * 40)
+    cancelOrder(store, buyer.id, pending.id); expect(pending.status).toBe('CANCELLED'); expect(buyer.cash).toBeGreaterThanOrEqual(0)
+  })
   it('applies a trade to both users cash and positions', () => {
     const store = new MemoryStore(); const buyer = createUser(store, 'buyer', 'pw'); const seller = createUser(store, 'seller', 'pw'); store.positions.get(seller.id)!.set('600519', 4)
     submitOrder(store, { userId: buyer.id, symbol: '600519', side: 'BUY', price: 10, quantity: 10 })

@@ -345,3 +345,9 @@ Research 阶段只输出：
 - 我的订单包含当前股票的全部订单状态，取消后的部分成交订单仍保留真实成交摘要。
 - 市场成交按股票分别保留/返回最新 20 条，前端按时间倒序展示。
 - SELL UI 不显示可卖数量；服务端 `availableToSell` 和 SELL reservation 继续阻止超卖。
+## Task 6F 现金与时间规则
+
+- `availableCash = cash - Σ(active BUY price × remainingQuantity)`，活动 BUY 仅为 PENDING/PARTIALLY_FILLED。
+- 资金不足的 BUY 在创建订单前整笔拒绝；挂单不直接扣 cash，真实成交按 Trade 金额扣款。
+- CANCELLED/FILLED BUY 不再占用购买力；SELL 继续使用持仓 reservation。
+- 服务端保留 ISO 时间，前端统一按本地 `YYYY-MM-DD HH:mm:ss` 展示。

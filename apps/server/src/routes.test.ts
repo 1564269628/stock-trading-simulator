@@ -57,4 +57,14 @@ describe('REST API', () => {
     expect((await fetch(`${url}/orders/${order.id}/cancel`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: owner.userId }) })).status).toBe(400)
     await new Promise<void>(resolve => server.close(() => resolve()))
   })
+  it('returns insufficient cash without creating an oversized BUY', async () => {
+    const store = new MemoryStore(); const app = express(); app.use(express.json()); app.use('/api', createRoutes(store)); const server = app.listen(0)
+    const port = (server.address() as { port: number }).port; const url = `http://127.0.0.1:${port}/api`; const headers = { 'content-type': 'application/json' }
+    const registered = await fetch(`${url}/auth/register`, { method: 'POST', headers, body: JSON.stringify({ username: 'cash-rest', password: 'pw' }) }); const account = await registered.json() as { userId: string }
+    const response = await fetch(`${url}/orders`, { method: 'POST', headers, body: JSON.stringify({ userId: account.userId, symbol: '600519', side: 'BUY', price: 1500, quantity: 1000 }) })
+    expect(response.status).toBe(400); expect(await response.json()).toEqual({ error: 'insufficient cash' })
+    const state = await (await fetch(`${url}/state?userId=${account.userId}`)).json() as { user: { cash: number }; orders: unknown[]; positions: Record<string, number>; marketTrades: unknown[] }
+    expect(state.user.cash).toBe(1_000_000); expect(state.orders).toHaveLength(0); expect(state.positions).toEqual({}); expect(state.marketTrades).toHaveLength(0)
+    await new Promise<void>(resolve => server.close(() => resolve()))
+  })
 })

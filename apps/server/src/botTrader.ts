@@ -29,8 +29,12 @@ export function runBotTick(store: MemoryStore, bots: ReturnType<typeof initializ
   const results: ReturnType<typeof submitOrder>[] = []
   for (const symbol of store.stocks.keys()) {
     const stock = store.stocks.get(symbol)!; const buyCount = randomCount(random); const sellCount = randomCount(random)
-    for (let index = 0; index < buyCount; index++) results.push(submitOrder(store, { userId: bots[index % bots.length].id, symbol, side: 'BUY', price: randomPrice(stock.referencePrice, random), quantity: randomQuantity(random) }))
-    for (let index = 0; index < sellCount; index++) results.push(submitOrder(store, { userId: bots[(index + 1) % bots.length].id, symbol, side: 'SELL', price: randomPrice(stock.referencePrice, random), quantity: randomQuantity(random) }))
+    for (let index = 0; index < buyCount; index++) {
+      try { results.push(submitOrder(store, { userId: bots[index % bots.length].id, symbol, side: 'BUY', price: randomPrice(stock.referencePrice, random), quantity: randomQuantity(random) })) } catch (error) { if ((error as Error).message !== 'insufficient cash') throw error }
+    }
+    for (let index = 0; index < sellCount; index++) {
+      try { results.push(submitOrder(store, { userId: bots[(index + 1) % bots.length].id, symbol, side: 'SELL', price: randomPrice(stock.referencePrice, random), quantity: randomQuantity(random) })) } catch (error) { if ((error as Error).message !== 'insufficient cash' && (error as Error).message !== 'insufficient position') throw error }
+    }
   }
   return results
 }
