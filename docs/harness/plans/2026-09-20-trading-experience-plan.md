@@ -11,10 +11,10 @@
 - [ ] 真实双浏览器窗口完整验收
 - [ ] Harness Review Gate
 
-> **For agentic workers:** 步骤使用复选框（`- [ ]`）语法进行跟踪。  
-> 前置基线：MVP PR #3 已合并到 `main`；本轮基于 `fb721200c7153ec42881aec935087a3f657e31ea`。  
-> 实现分支：`feat/trading-experience`。  
-> 前一阶段：PR #3 `feat: implement stock trading simulator MVP`。  
+> **For agentic workers:** 步骤使用复选框（`- [ ]`）语法进行跟踪。
+> 前置基线：MVP PR #3 已合并到 `main`；本轮基于 `fb721200c7153ec42881aec935087a3f657e31ea`。
+> 实现分支：`feat/trading-experience`。
+> 前一阶段：PR #3 `feat: implement stock trading simulator MVP`。
 > 本计划只约束第二阶段“交易体验升级”；创建本计划与 Implementation PR 后先停止，不立即执行下列业务实现步骤。
 
 **Goal:** 在不改变单体、全内存、限价撮合核心的前提下，把 MVP 升级为更像真实交易终端的中国股票模拟交易体验，并补齐卖出持仓约束、多窗口实时同步、价格历史折线图、Bot 对手盘和简单盘口。
@@ -917,14 +917,14 @@ orderBooks: Record<string, OrderBookSnapshot>
 
 - [ ] **步骤 2：双用户手工测试——卖出约束**
 
-  用户 A 新注册后直接 SELL → 必须失败。  
-  A 先通过与 Bot 成交获得持仓，再 SELL 小于等于可卖数量 → 成功。  
+  用户 A 新注册后直接 SELL → 必须失败。
+  A 先通过与 Bot 成交获得持仓，再 SELL 小于等于可卖数量 → 成功。
   再尝试超量 SELL → 服务端拒绝，前端展示明确错误。
 
 - [ ] **步骤 3：双用户手工测试——实时状态**
 
-  A、B 同时在线，不刷新页面。  
-  让 B 先获得持仓，再由 A/B 形成一笔人工对手交易；确认双方订单状态、remainingQuantity、cash、positions、recentTrades 实时变化。  
+  A、B 同时在线，不刷新页面。
+  让 B 先获得持仓，再由 A/B 形成一笔人工对手交易；确认双方订单状态、remainingQuantity、cash、positions、recentTrades 实时变化。
   同时确认盘口在挂单/成交后实时变化。
 
 - [ ] **步骤 4：Bot 与行情手工测试**
@@ -940,9 +940,9 @@ orderBooks: Record<string, OrderBookSnapshot>
 
 - [ ] **步骤 5：文档更新**
 
-  README 更新当前功能、三只中国股票、卖出规则、Bot、盘口、历史图表和启动/测试方式。  
-  `docs/architecture.md` 增加 Price History、Market View、Bot Trader，并明确 Bot 仍调用 TradingService。  
-  `docs/requirements.md` 增加第二阶段 addendum，明确“禁止卖空”覆盖 MVP 的旧非目标。  
+  README 更新当前功能、三只中国股票、卖出规则、Bot、盘口、历史图表和启动/测试方式。
+  `docs/architecture.md` 增加 Price History、Market View、Bot Trader，并明确 Bot 仍调用 TradingService。
+  `docs/requirements.md` 增加第二阶段 addendum，明确“禁止卖空”覆盖 MVP 的旧非目标。
   `docs/ai-collaboration.md` 只记录本轮真实发生的 plan / TDD / 双客户端验证 / review 协作，不伪造 Prompt。
 
 - [ ] **步骤 6：通过正常 hook 刷新 tree**
