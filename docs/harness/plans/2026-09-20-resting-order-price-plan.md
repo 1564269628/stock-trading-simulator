@@ -478,6 +478,19 @@ BUY 5000 x 100
 - [ ] 浏览器顺序成交验收通过。
 - [ ] 用户最终产品验收后再进入 Harness Review Gate。
 
+## 2026-09-20 独立审查收口
+
+- [x] 清理 `App.vue` 第一行字面量 patch marker。
+- [x] 登录/注册成功后清理旧错误提示。
+- [x] 撤单成功后清理旧错误提示。
+- [x] Vue 源码扫描未发现其他同类 patch marker。
+- [x] `npm test`：37/37。
+- [x] `npm run build` 通过。
+- [x] `git diff --check` 通过。
+- [x] 浏览器 smoke：错误登录后注册成功，旧错误提示消失。
+- [ ] Harness Local Reviewer Gate：待独立 reviewer。
+- [ ] 用户最终产品验收。
+
 ## 明确不做
 
 - 不处理极端 BUY 5000 长期 resting 后影响后续成交价的特殊情况。

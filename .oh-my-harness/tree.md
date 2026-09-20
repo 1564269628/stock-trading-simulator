@@ -3,7 +3,7 @@
 Use this file for navigation only. Verify implementation details by reading source files directly.
 
 - Source: `git ls-files --cached --others --exclude-standard`
-- Entries: 81
+- Entries: 82
 
 ```text
 ./
@@ -69,6 +69,7 @@ Use this file for navigation only. Verify implementation details by reading sour
 │   │   │   ├── tradingService.test.ts
 │   │   │   ├── tradingService.ts
 │   │   │   ├── types.ts
+│   │   │   ├── websocketHub.test.ts
 │   │   │   └── websocketHub.ts
 │   │   ├── package.json
 │   │   └── tsconfig.json
