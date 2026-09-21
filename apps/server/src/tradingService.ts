@@ -15,12 +15,19 @@ export interface SubmitOrderOptions { matchOptions?: MatchOptions }
 export function submitOrder(store: MemoryStore, input: { userId: string; symbol: string; side: OrderSide; price: number; quantity: number }, options?: SubmitOrderOptions) {
   if (!store.users.has(input.userId) || !store.stocks.has(input.symbol)) throw new Error('invalid user or symbol')
   if ((input.side !== 'BUY' && input.side !== 'SELL') || typeof input.price !== 'number' || !Number.isFinite(input.price) || input.price <= 0 || typeof input.quantity !== 'number' || !Number.isFinite(input.quantity) || !Number.isInteger(input.quantity) || input.quantity <= 0) throw new Error('invalid order')
+
+  // 未成交挂单会占用购买力/可卖持仓，防止同一笔资金或持仓被多张活动订单重复使用。
   if (input.side === 'BUY' && input.price * input.quantity > availableCash(store, input.userId)) throw new Error('insufficient cash')
   if (input.side === 'SELL' && input.quantity > availableToSell(store, input.userId, input.symbol)) throw new Error('insufficient position')
+
   const order: Order = { id: `order-${store.nextSequence()}`, ...input, remainingQuantity: input.quantity, status: 'PENDING', sequence: store.sequence, createdAt: new Date().toISOString() }
   store.orders.set(order.id, order)
+
+  // 用户和 Bot 都通过同一个 submitOrder -> MatchingEngine 链路，避免出现两套交易规则。
   const trades = matchOrder(store, order, options?.matchOptions)
   store.trades.push(...trades)
+
+  // 下单时只做额度校验，不提前扣现金/持仓；只有真实 Trade 产生后才按实际成交价记账。
   for (const trade of trades) {
     const buyer = store.users.get(trade.buyerId)!; const seller = store.users.get(trade.sellerId)!
     buyer.cash -= trade.price * trade.quantity; seller.cash += trade.price * trade.quantity
@@ -28,7 +35,9 @@ export function submitOrder(store: MemoryStore, input: { userId: string; symbol:
     buyerPositions.set(trade.symbol, (buyerPositions.get(trade.symbol) ?? 0) + trade.quantity)
     sellerPositions.set(trade.symbol, (sellerPositions.get(trade.symbol) ?? 0) - trade.quantity)
   }
+
   if (trades.length > 0) {
+    // latestPrice 只由最近一笔真实成交驱动；referencePrice 只用于模拟市场和 Bot 报价。
     const latestTrade = trades[trades.length - 1]; const stock = store.stocks.get(latestTrade.symbol)!
     stock.latestPrice = latestTrade.price
     stock.changePercent = Number((((stock.latestPrice - stock.initialPrice) / stock.initialPrice) * 100).toFixed(2))
@@ -46,6 +55,8 @@ export function cancelOrder(store: MemoryStore, userId: string, orderId: string)
   const ownBook = order.side === 'BUY' ? book.buys : book.sells
   const index = ownBook.findIndex(item => item.id === order.id)
   if (index >= 0) ownBook.splice(index, 1)
+
+  // 订单改为 CANCELLED 后不再计入下面的 reservation，剩余购买力/持仓会自然释放。
   order.status = 'CANCELLED'
   return order
 }

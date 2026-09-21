@@ -9,7 +9,9 @@ export const connect = (
 ): WebSocketConnection => {
   let socket: WebSocket | undefined
   let retryTimer: ReturnType<typeof setTimeout> | undefined
+  // stopped 用来区分“用户主动关闭”和“网络意外断开”，主动关闭后不能再自动重连。
   let stopped = false
+  // hasOpened 用来区分首次连接和真正的重连；只有重连成功后才需要重新拉取完整业务状态。
   let hasOpened = false
 
   const open = () => {
@@ -23,6 +25,7 @@ export const connect = (
       hasOpened = true
     }
     socket.onclose = () => {
+      // 意外断线后固定 1 秒重连；retryTimer 防止同一轮断线重复创建多个重连计时器。
       if (!stopped && retryTimer === undefined) {
         retryTimer = setTimeout(() => {
           retryTimer = undefined
