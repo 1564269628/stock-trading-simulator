@@ -1,439 +1,298 @@
 # PR #5 Full Branch Review
 
 **PR:** https://github.com/1564269628/stock-trading-simulator/pull/5  
-**Reviewed HEAD:** `464c1eb0c9590ddeabf8fddc2fd8a8d2ec80709f`  
-**Mode:** Harness-aligned local static review  
-**Status:** **changes required**
+**Latest reviewed HEAD:** `f7627428eeb207479f9619bc6fb36b4e7a45ec48`  
+**Review round:** 2  
+**Mode:** Harness-aligned independent static review  
+**Latest result:** **no new blocking code finding; manual acceptance / formal Reviewer Gate still pending**
 
-> 说明：当前环境没有 Harness 要求的独立 `reviewer` 子智能体，因此本文件不能替代正式 Reviewer Gate。本次按仓库 `AGENTS.md`、`docs/specs/review-guidelines.md`、相关 Implementation Plan 和当前完整源码执行人工独立审查。
-
----
-
-## 审查范围
-
-本轮不是只看最后一个 commit，而是检查 PR #5 当前分支的完整应用代码和关键配置，包括：
-
-- `apps/server/src/*`
-  - 撮合
-  - TradingService
-  - Bot
-  - 行情
-  - 盘口
-  - REST
-  - WebSocket
-  - 服务端测试
-- `apps/web/src/*`
-  - App
-  - REST client
-  - session recovery
-  - WebSocket reconnect
-  - 盘口/图表
-  - 前端测试
-- 根脚本与运行配置
-  - `package.json`
-  - `Dockerfile`
-  - `docker-compose.yml`
-  - `apps/web/vite.config.ts`
-- Harness / 交付工件
-  - `AGENTS.md`
-  - `.oh-my-harness/tree.md`
-  - WebSocket / mobile session plans
-  - README
-  - PR #5 当前描述
+> 当前环境没有 Harness 要求的独立 `reviewer` 子智能体，因此本文件不能替代仓库规范中的正式 Reviewer Gate。本轮依据 `AGENTS.md`、`docs/specs/review-guidelines.md`、Implementation Plan、上一轮 Review 和 PR 当前 HEAD 进行复审。
 
 ---
 
-# Blocking Findings
+# Round 2：修复后复审
 
-## Finding 1：WebSocket 重连后的状态同步失败会被吞掉，可能永久停留在旧会话
+## 复审范围
 
-**位置：**
+重点检查上一轮 Review 后的两个提交：
 
-- `apps/web/src/App.vue` 的 `startRealtime()`
-- `apps/web/src/App.vue` 的 `restoreSession()`
+- `dc4ed53856d64b43d223fc02e6d0cd291e4f8f39` — 修复重连后的会话恢复
+- `f7627428eeb207479f9619bc6fb36b4e7a45ec48` — 同步会话恢复 Harness 工件
 
-当前两条状态恢复路径语义不一致。
+并重新核对：
 
-页面启动恢复时，`restoreSession()` 已经正确区分：
+- `apps/web/src/App.vue`
+- `apps/web/src/services/sessionRecovery.ts`
+- `apps/web/src/services/sessionRecovery.test.ts`
+- `apps/web/src/services/api.ts`
+- `apps/web/src/services/session.ts`
+- `apps/web/src/services/websocket.ts`
+- `.oh-my-harness/tree.md`
+- `docs/harness/plans/2026-09-21-mobile-session-recovery-plan.md`
+- PR #5 当前描述
 
-```text
-404 user not found
--> 清 localStorage userId
--> 清 user/state
--> 回登录页
+服务端撮合、资金、Bot、行情和 Docker 在上一轮完整分支 Review 后没有新的业务代码变更，因此本轮以回归核对为主。
 
-网络错误
--> 保留 session
--> 1 秒后继续 retry
-```
+---
 
-但 WebSocket 重连成功后的回调目前是：
+## 上一轮 Blocking Finding 1：已关闭
 
-```ts
-async () => {
-  try {
-    await refreshState()
-    message.value = ''
-  } catch {
-    message.value = '连接已恢复，正在同步最新状态…'
-  }
-}
-```
+上一轮问题：
 
-这里只改提示文字：
+> WebSocket 重连成功后的 `/api/state` 同步如果失败或返回 404，只显示提示文字，不会继续 retry，也不会正确失效旧 session。
 
-- 不处理 `404 user not found`；
-- 不清理已经失效的旧 userId；
-- 不重新进入 session recovery；
-- 临时 REST 同步失败后也没有继续 retry。
-
-### 可复现路径 A：服务端重启
-
-1. 用户已登录，页面保持打开；
-2. 服务端重启，MemoryStore 被清空；
-3. WebSocket 断开；
-4. 新服务起来后 WebSocket 自动重连成功；
-5. reconnect callback 调用 `GET /api/state?userId=旧ID`；
-6. 服务端返回 `404 user not found`；
-7. 当前代码 catch 后只显示“连接已恢复，正在同步最新状态…”；
-8. `user` 和 localStorage 里的旧 userId 都还在；
-9. WebSocket 已经处于 OPEN，不会再次触发 reconnect callback；
-10. 页面继续显示旧交易状态，后续下单只会得到 `invalid user or symbol`。
-
-这和移动端恢复计划中：
-
-> 只有服务端明确返回 404 user not found 时才清理本地会话并要求重新登录
-
-直接冲突。
-
-### 可复现路径 B：重连瞬间 REST 暂时失败
-
-即使用户仍然存在，如果 WebSocket 已恢复、但这一刻 `/api/state` 暂时请求失败：
-
-1. callback 只尝试一次；
-2. 失败后不 retry；
-3. socket 继续保持 OPEN；
-4. 没有下一次 reconnect callback；
-5. 页面可能一直保留断线前的旧订单/持仓状态，直到偶然收到另一个会触发 `refreshState()` 的事件。
-
-这不满足 WebSocket plan 中：
-
-> 重连成功后通过 /api/state 覆盖完整前端快照
-
-的状态一致性要求。
-
-### 建议修复方向
-
-不要再让“页面启动恢复”和“WebSocket 重连恢复”各自实现不同错误语义。
-
-建议收敛成一个很小的共享同步函数，例如：
+当前实现已经收敛到统一的：
 
 ```text
-syncCurrentSession / recoverCurrentSession
+createSessionRecovery
 ```
 
-统一规则：
+页面首次恢复、WebSocket reconnect、`user:update`、`trade:new` 都走同一套状态同步语义：
 
 ```text
-/state 成功
--> 覆盖 state
+/api/state 成功
+-> 覆盖完整 state
+-> 清恢复提示
 
 404 user not found
 -> clearSessionUserId
--> close websocket
--> user/state = undefined
+-> 关闭 WebSocket
+-> 清 user/state
 -> 回登录页
 
-网络/临时错误
--> 保留 session
--> 继续 retry
+临时网络错误
+-> 保留 userId
+-> 保持 session
+-> 单一 retry timer 继续重试
 ```
 
-WebSocket 层本身仍保持现在的固定 1 秒 reconnect，不需要重写。
+对应测试已经新增：
 
-**严重度：Blocking**
+- 404 -> `onInvalid`
+- transient network error -> retry，不 invalid session
+- 多次失败只保留一个 retry timer
+
+因此上一轮 **Blocking Finding 1 已修复**。
 
 ---
 
-## Finding 2：Harness 工件没有随当前实现同步，Review Gate 不能宣告完成
+## 上一轮 Blocking Finding 2：已关闭
 
-### 2.1 `.oh-my-harness/tree.md` 已明显过期
+### Harness tree
 
-当前文件仍写：
+`.oh-my-harness/tree.md` 已从：
 
 ```text
 Entries: 82
 ```
 
-而且没有包含本 PR 已新增的：
-
-- `apps/web/src/services/api.test.ts`
-- `apps/web/src/services/session.ts`
-- `apps/web/src/services/session.test.ts`
-- 多个 `docs/harness/plans/2026-09-21-*.md`
-- 当前移动端 session recovery plan
-
-这与：
-
-- `AGENTS.md`
-- `2026-09-21-websocket-reconnect-resync-plan.md`
-- `2026-09-21-mobile-session-recovery-plan.md`
-
-中“tree 由正常 hook 刷新并随改动提交”的要求不一致。
-
-### 2.2 Mobile Session Recovery Plan 的 checklist 仍全部未勾选
-
-当前：
-
-`docs/harness/plans/2026-09-21-mobile-session-recovery-plan.md`
-
-已经有对应实现提交，但所有实现/验证 checkbox 仍然保持：
+刷新为：
 
 ```text
-- [ ]
+Entries: 97
 ```
 
-包括：
+并已经包含：
 
-- API error status；
-- session storage；
-- App restore；
-- web tests；
-- build；
-- diff check；
-- tree refresh；
-- manual acceptance；
-- Reviewer Gate。
+- `api.test.ts`
+- `session.ts`
+- `session.test.ts`
+- `sessionRecovery.ts`
+- `sessionRecovery.test.ts`
+- `websocket.test.ts`
+- 9 月 21 日新增 plans
+- 当前 Review 文档
+- Docker 文件
 
-其中手机、浏览器和 server restart 人工验收确实尚未运行，应该继续保持未完成；但已经真实完成并验证过的实现步骤也没有同步 plan 状态。
+tree 与当前 tracked files 已重新对齐。
 
-### 建议修复方向
+### Mobile Session Recovery Plan
 
-由实现 agent：
+已真实完成的实现、测试、build、diff check、tree refresh 等步骤已经同步为 `[x]`。
 
-1. 通过项目正常 hook 刷新 `.oh-my-harness/tree.md`；
-2. 根据真实执行结果同步 plan checklist；
-3. **不要**提前勾选：
-   - 桌面浏览器刷新验收；
-   - 手机真实断网/恢复；
-   - server restart 404 反向验收；
-   - Reviewer Gate；
-4. 修完 Finding 1 后重新验证，再进入下一轮 review。
+以下人工 Gate 仍保持未完成，没有伪造：
 
-**严重度：Blocking for Harness Gate**
+- 桌面浏览器刷新验收；
+- 手机真实断网 / 恢复验收；
+- server restart -> 404 -> 登录页验收；
+- Harness Reviewer Gate。
+
+因此上一轮 **Blocking Finding 2 已修复**。
 
 ---
 
-# Non-blocking Findings
-
-## Finding 3：已有 session 时首次渲染仍可能短暂闪出登录页
+## 上一轮 Non-blocking：登录页首帧闪现已修复
 
 当前：
 
 ```ts
-const restoringSession = ref(false)
+const restoringSession = ref(Boolean(loadSessionUserId()))
 ```
 
-而 session 恢复只在：
+如果本地已有 userId，首次 render 就直接进入恢复 UI，不会先显示登录表单再切换。
+
+该 finding 已关闭。
+
+---
+
+# Round 2 新发现
+
+## Non-blocking：SessionRecovery 仍允许多个 full-state sync 同时在途
+
+当前 `SessionRecovery.run()` 只保证：
+
+- 最多一个 retry timer；
+
+但不保证：
+
+- 最多一个 `sync()` 正在执行。
+
+而 `App.vue` 中：
+
+- `user:update`
+- `trade:new`
+- WebSocket reconnect
+
+都可能调用：
 
 ```ts
-onMounted(() => {
-  void restoreSession()
-})
+sessionRecovery?.run()
 ```
 
-执行。
-
-因此页面第一次 render 时：
+所以短时间内可能出现多个并发：
 
 ```text
-restoringSession = false
-user = undefined
+GET /api/state
+GET /api/state
+GET /api/state
 ```
 
-模板会先命中：
+测试 `keeps only one retry timer` 也明确允许两个初始 `run()` 同时执行。
 
-```vue
-<section v-else-if="!user" ...>
-```
+### 影响
 
-即使 localStorage 里已经有有效 userId，也可能先显示一帧登录表单，然后 `onMounted` 才切换到“正在恢复连接”。
+同一笔交易里服务端会同时推送 `trade:new` 和 `user:update`，因此这个并发并非纯理论。
 
-这和 plan 中“不应先闪回登录页”的产品目标不完全一致，手机网络恢复时更容易被用户感知为“又让我登录了”。
+多个完整快照请求若响应顺序与发起顺序不同，存在较旧 snapshot 后返回、覆盖较新 snapshot 的可能；另外 `stop()` 只清 timer，已经在途的 `sync()` 仍会正常完成。
+
+当前短时 Demo 中后续实时事件通常会再次纠正状态，因此本轮不把它升级为 blocking。
 
 ### 建议
 
-保持实现简单即可，例如初始化阶段就根据是否存在 session 决定：
+如果后续还要继续增强稳定性，可以用一个很小的 single-flight / generation guard：
 
-```text
-restoringSession = Boolean(loadSessionUserId())
-```
+- 同一时刻只允许一个恢复请求真正应用结果；
+- 新事件到来时最多记一个“完成后再同步一次”；
+- `stop()` 后旧 recovery 的后续 callback 不再影响页面；
+- 成功后清掉不再需要的 pending retry timer。
 
-或使用等价的首次 render 前恢复状态，不需要引入状态管理框架。
+不要为此引入状态管理框架或复杂请求队列。
 
 **严重度：Non-blocking**
 
 ---
 
-## Finding 4：Bot 历史订单和成交记录长期无界增长，运行时间越长扫描成本越高
+# 没有发现新的服务端 Blocking 回归
 
-当前 Bot 每秒、每只股票随机产生：
+本轮重新对照上一轮完整分支 Review，以下核心语义没有被本次 session 修复改动：
 
-- 2~4 BUY
-- 2~4 SELL
+- Matching Engine
+  - 价格优先
+  - 时间优先
+  - resting order price
+  - 部分成交
+  - 多档成交
+- BUY purchasing power reservation
+- SELL position reservation
+- 真实成交后才更新现金 / 持仓
+- `referencePrice` / `Trade.price` / `latestPrice` 职责分离
+- Bot 与用户统一走真实 `submitOrder -> MatchingEngine`
+- 真实 Top 5 OrderBook
+- Docker / Vite proxy 边界
 
-3 只股票合计约：
+上一轮记录的 Bot 历史订单 / 成交无界增长仍作为短时 Demo 的已知限制保留，本轮不建议扩大范围处理。
+
+---
+
+# Verification
+
+PR 当前描述声明：
+
+- `npm test --workspace apps/web`：11 tests passed
+- `npm test`：server 39 + web 11 tests passed
+- `npm run build`：通过
+- `git diff --check`：通过
+
+本轮再次尝试在独立环境 clone 当前 branch 后运行上述命令，但执行环境仍然无法解析：
 
 ```text
-12 ~ 24 个新订单 / 秒
+github.com
 ```
 
-虽然 9 秒后的 Bot 活动订单会从真实 OrderBook 中撤掉，但：
-
-`MemoryStore.orders`
-
-仍永久保存所有：
-
-- FILLED
-- CANCELLED
-- Bot 历史订单
-
-同时：
-
-`MemoryStore.trades`
-
-也没有上限。
-
-这意味着大约每小时会新增：
+实际错误：
 
 ```text
-43,200 ~ 86,400 条订单
+fatal: unable to access 'https://github.com/1564269628/stock-trading-simulator.git/':
+Could not resolve host: github.com
 ```
 
-而 `availableCash()` / `availableToSell()` 每次下单仍会扫描整个 `store.orders.values()`。
+当前 HEAD 也没有 GitHub Actions workflow run / commit status 可作为独立 CI 证据。
 
-随着运行时间增长：
+因此本轮验证结论仍然是：
 
-- 内存持续增加；
-- Bot 每个 tick 的 reservation 校验越来越慢；
-- `/api/state`、`recentMarketTrades()` 等读取历史状态的成本也持续增长。
-
-本题属于短时本地模拟项目，所以暂不建议做复杂持久化或索引系统；但这是一个真实的长运行稳定性风险。
-
-### 建议
-
-如果只定位为短时面试 Demo，可以明确接受并记录限制。
-
-如果希望连续运行较长时间，优先采用简单方案：
-
-- 对 Bot 的终态历史订单做有界保留/清理；
-- 对市场成交只保留当前 UI 真正需要的有限历史；
-- 不引入数据库、Redis 或复杂缓存。
-
-**严重度：Non-blocking**
-
----
-
-# Verification Gaps
-
-## 1. PR 的自动测试声明没有在本次 Review 环境独立复跑
-
-PR 描述当前声明：
-
-- server 39 tests
-- web 8 tests
-- build pass
-- diff check pass
-
-本次审查没有直接相信这些声明。
-
-我尝试在独立运行环境 clone 当前 branch 后重跑：
-
-```bash
-git clone --branch feat/websocket-reconnect-resync ...
+```text
+source/tests reviewed
+runtime commands: not independently run
 ```
 
-但环境 DNS 无法解析 `github.com`，因此无法取得本地工作树并执行：
-
-- `npm test`
-- `npm run build`
-- `git diff --check`
-
-同时当前 HEAD 没有 GitHub Actions workflow run / commit status 可作为独立 CI 证据。
-
-所以本轮能确认的是：
-
-- 已阅读完整源码；
-- 已阅读全部 server tests；
-- 已阅读全部 web tests；
-- 已核对相关 implementation plans；
-- 无法独立执行验证命令。
-
-这不是把测试判为失败，而是：
-
-> **not independently run**
-
-## 2. 本轮核心用户场景仍缺真实验收
-
-PR 描述本身已经正确标记为未运行：
-
-- 桌面浏览器刷新恢复；
-- 手机真实断网 → 恢复网络；
-- 服务端重启后的 404 失效恢复。
-
-其中手机真实断网场景正是本轮问题来源，因此在它真实通过前，不应把本任务写成 done。
+这不代表测试失败，但不能把 PR 描述中的执行结果冒充成本 Reviewer 独立跑出的结果。
 
 ---
 
-# 已检查且未发现新的 blocking 问题
+# 仍必须完成的人工验收
 
-以下核心逻辑与当前 requirements / architecture 一致：
+PR 当前正确保留以下未完成项：
 
-- Matching Engine：
-  - 价格优先；
-  - 时间优先；
-  - resting order price；
-  - 部分成交；
-  - 多档成交；
-- TradingService：
-  - BUY purchasing power reservation；
-  - SELL position reservation；
-  - 真正成交后再记账；
-  - 撤单释放剩余额度；
-- 价格语义：
-  - `referencePrice` 仅用于 Bot 报价中心；
-  - `Trade.price` 来自真实撮合；
-  - `latestPrice` 只由最近真实成交更新；
-- Bot：
-  - 与用户统一走 `submitOrder -> MatchingEngine`；
-  - 真实 OrderBook；
-  - 9 秒活动订单过期；
-- Market View：
-  - 从真实订单簿聚合 Top 5；
-- Docker / Vite：
-  - server/web target 和代理配置结构一致；
-- Session：
-  - 只保存 userId；
-  - 不保存密码；
-  - page reload 时已有完整 restore 基础逻辑；
-- WebSocket：
-  - 意外 close 后 1 秒 retry；
-  - 主动 close 不 retry；
-  - reconnect socket 继续转发 message。
+1. **桌面浏览器刷新**
+   - 登录
+   - 刷新页面
+   - 不闪回登录页
+   - 自动恢复完整状态
+   - WebSocket 正常建立
+
+2. **手机真实断网 -> 恢复网络**
+   - 登录后关闭网络 5~10 秒
+   - 恢复网络
+   - 页面即使被浏览器 reload，也不要求重新登录
+   - 自动恢复资金、持仓、委托、成交
+   - 再下一笔订单确认实时更新
+
+3. **server restart -> 404**
+   - 已登录时重启 server
+   - MemoryStore 清空
+   - reconnect 后 `/api/state?userId=旧ID` 返回 404
+   - 自动清 localStorage userId
+   - 回登录页
+   - 显示“登录状态已失效，请重新登录”
+
+其中第 2 项就是本轮最初的真实手机问题，必须由真实设备验收。
 
 ---
 
-# Review Result
+# Round 2 Review Result
 
 ## Blocking
 
-1. **WebSocket 重连后的 REST resync 失败/404 被吞掉，可能永久停留在旧 session / 旧 state。**
-2. **Harness 工件未同步：tree stale，mobile session plan checklist 未更新。**
+```text
+0 个新的 Blocking code finding
+```
+
+上一轮两个 Blocking 均已关闭。
 
 ## Non-blocking
 
-1. session 恢复首帧可能短暂闪登录页。
-2. Bot 订单/成交历史无界增长，存在长时间运行的内存和扫描成本风险。
+1. `SessionRecovery.run()` 允许多个 full-state sync 并发，后续可做轻量 single-flight / generation guard。
+2. Bot 历史订单 / 成交无界增长仍是已接受的短时 Demo 限制。
 
 ## Reviewer Gate
 
@@ -441,27 +300,25 @@ PR 描述本身已经正确标记为未运行：
 Harness Reviewer Gate: PENDING
 ```
 
-原因：
+不是因为当前又发现业务 Blocking，而是因为：
 
-- 当前环境没有 Harness 要求的独立 reviewer 子智能体；
-- 当前静态审查已经发现 blocking findings；
-- 核心手机真实验收尚未完成；
-- 本次环境无法独立重跑 npm test/build。
+- 仓库规范要求的独立 `reviewer` 子智能体在当前环境不可用；
+- 手机真实断网 / 恢复验收尚未执行；
+- server restart 404 人工验收尚未执行；
+- 本 Reviewer 环境无法独立重跑 npm test/build。
 
 ---
 
 # 建议下一步
 
-1. 先让 Codex 只修 Finding 1；
-2. 用正常 hook 刷新 tree，并同步 plan checkbox；
-3. 跑：
-   - `npm test --workspace apps/web`
-   - `npm test`
-   - `npm run build`
-   - `git diff --check`
-4. 做三类人工验收：
-   - 页面刷新恢复；
-   - 手机断网/恢复；
-   - server restart -> 404 -> 回登录；
-5. 再进行一次独立 Local Reviewer；
-6. 无 blocking finding 后再考虑 merge。
+当前不建议再扩大代码修改范围。
+
+优先由用户实际执行：
+
+1. 页面刷新恢复；
+2. 手机断网 -> 恢复网络；
+3. server restart -> 404。
+
+如果这三类人工验收全部通过，则本轮核心 WebSocket / session recovery 功能从静态代码审查角度已经没有 blocking finding。
+
+如果手机仍然出现回登录页或状态不恢复，再根据真实复现路径继续 debug，不要预先增加复杂连接机制。
