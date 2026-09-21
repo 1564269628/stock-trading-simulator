@@ -66,51 +66,77 @@ npm run build
 
 ### 前后端总体架构
 
-```mermaid
-flowchart LR
-    subgraph Web["Vue 3 前端"]
-        App["App.vue<br/>页面状态与交易交互"]
-        API["services/api.ts<br/>REST 客户端"]
-        WS["services/websocket.ts<br/>WebSocket / 自动重连"]
-        Recovery["services/sessionRecovery.ts<br/>完整状态恢复 / 重试"]
-
-        App --> API
-        App --> WS
-        WS --> Recovery
-        Recovery --> API
-    end
-
-    subgraph Server["Node.js / Express 后端"]
-        Routes["routes.ts<br/>REST API"]
-        Hub["websocketHub.ts<br/>实时消息推送"]
-        Trading["tradingService.ts<br/>下单校验 / 资金持仓结算"]
-        Matching["matchingEngine.ts<br/>价格优先 / 时间优先撮合"]
-        View["marketView.ts / tradeView.ts<br/>盘口与成交视图"]
-        Simulator["marketSimulator.ts<br/>referencePrice 模拟"]
-        Bot["botTrader.ts<br/>Bot 流动性"]
-        Store["MemoryStore<br/>用户 / 订单 / 盘口 / 持仓 / 成交"]
-
-        Routes --> Trading
-        Trading --> Matching
-        Matching --> Store
-        Trading --> Store
-
-        Routes --> View
-        View --> Store
-
-        Bot --> Trading
-        Bot --> Hub
-
-        Simulator --> Store
-        Simulator --> Hub
-
-        Routes --> Hub
-        Hub --> View
-    end
-
-    API -- "HTTP /api/*" --> Routes
-    Hub -- "WebSocket /ws" --> WS
+```text
+┌──────────────────────────────────────── Vue 3 前端 ────────────────────────────────────────┐
+│                                                                                            │
+│                                      App.vue                                               │
+│                     登录 / 股票选择 / 下单撤单 / 页面响应式状态                              │
+│                              │                         ▲                                   │
+│                 ┌────────────┴────────────┐            │ WebSocket 事件                    │
+│                 │                         │            │                                   │
+│                 ▼                         ▼            │                                   │
+│        services/api.ts           services/websocket.ts ─┘                                  │
+│          REST 客户端              WebSocket 连接 / 1 秒重连                                 │
+│                 ▲                         │                                                │
+│                 │                         │ 重连成功                                       │
+│                 │                         ▼                                                │
+│                 └──────── services/sessionRecovery.ts                                      │
+│                          GET /api/state 完整状态恢复 / 临时失败重试                          │
+│                                                                                            │
+└──────────────────────┬───────────────────────────────────────▲─────────────────────────────┘
+                       │ HTTP /api/*                            │ WebSocket /ws
+                       ▼                                       │
+┌──────────────────────────────── Node.js / Express 后端 ────────────────────────────────────┐
+│                                                                                            │
+│                                      server.ts                                             │
+│                        创建 Store / 组装模块 / 启动服务                                      │
+│                                         │                                                  │
+│                     ┌───────────────────┼────────────────────┐                             │
+│                     ▼                   ▼                    ▼                             │
+│                 routes.ts        websocketHub.ts      后台市场模拟                           │
+│                  REST API          实时推送中心               │                             │
+│                     │                   ▲            ┌────────┴────────┐                    │
+│                     │                   │            ▼                 ▼                    │
+│                     │                   │   marketSimulator.ts   botTrader.ts               │
+│                     │                   │   referencePrice      Bot 买卖订单                 │
+│                     │                   │      随机游走              │                      │
+│                     │                   │            │                 │ submitOrder()        │
+│                     ▼                   │            │                 ▼                      │
+│             tradingService.ts ──────────┤            │        tradingService.ts             │
+│        下单校验 / 撤单 / 购买力与持仓预留 │            │                 │                      │
+│        成交后的现金 / 持仓 / 最新价结算    │            │                 │                      │
+│                     │                   │            │                 │                      │
+│                     ▼                   │            │                 ▼                      │
+│             matchingEngine.ts           │            │        matchingEngine.ts             │
+│        价格优先 / 时间优先 / resting price│            │                 │                      │
+│                     │                   │            │                 │                      │
+│                     └──────────┬────────┘            │                 │                      │
+│                                ▼                     ▼                 ▼                      │
+│                 ┌────────────────────────── MemoryStore ──────────────────────────┐          │
+│                 │ users / stocks / orders / orderBooks / positions / trades      │          │
+│                 │ priceHistory / sequence / referencePrice / latestPrice          │          │
+│                 └──────────────────────┬───────────────────────────────────────────┘          │
+│                                        │                                                      │
+│                        ┌───────────────┴────────────────┐                                     │
+│                        ▼                                ▼                                     │
+│                  marketView.ts                     tradeView.ts                               │
+│             五档盘口聚合 / OrderBook             市场成交 / 用户成交视图                      │
+│                        │                                │                                     │
+│                        └───────────────┬────────────────┘                                     │
+│                                        ▼                                                      │
+│                                websocketHub.ts                                                │
+│                      market:update / trade:new / user:update                                   │
+│                              orderbook:update                                                  │
+│                                        │                                                      │
+└────────────────────────────────────────┼──────────────────────────────────────────────────────┘
+                                         │
+                                         └──────────────→ 前端实时更新
 ```
+
+整体上，`MemoryStore` 是服务端运行时的唯一状态源。真实用户和 Bot 都统一经过
+`submitOrder -> TradingService -> MatchingEngine`，不会维护第二套撮合逻辑；行情模拟只推动
+`referencePrice`，真实 `latestPrice` 仍由实际成交产生。HTTP 负责命令与完整快照，
+WebSocket 负责实时事件，断线重连后再通过 `/api/state` 做完整 resync。
 
 ### 核心交易与实时同步流程
 
