@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { api, ApiError } from './services/api'
+import { api } from './services/api'
 import { connect } from './services/websocket'
 import { clearSessionUserId, loadSessionUserId, saveSessionUserId } from './services/session'
+import { createSessionRecovery, type SessionRecovery } from './services/sessionRecovery'
 import type { Order, Stock, Trade, UserState } from './types'
 import PriceChart from './components/PriceChart.vue'
 import OrderBookPanel from './components/OrderBookPanel.vue'
@@ -10,9 +11,9 @@ import './styles.css'
 import { formatDateTime } from './utils/formatDateTime'
 
 const username = ref(''); const password = ref(''); const user = ref<{ userId: string }>(); const state = ref<UserState>(); const message = ref('')
-const restoringSession = ref(false)
+const restoringSession = ref(Boolean(loadSessionUserId()))
 let realtimeConnection: ReturnType<typeof connect> | undefined
-let restoreRetryTimer: ReturnType<typeof setTimeout> | undefined
+let sessionRecovery: SessionRecovery | undefined
 const selectedSymbol = ref('600519'); const buyPrice = ref(1500); const buyQuantity = ref(100); const sellPrice = ref(1500); const sellQuantity = ref(100)
 const selectedStock = computed<Stock | undefined>(() => state.value?.stocks.find(stock => stock.symbol === selectedSymbol.value))
 const currentOpenOrders = computed(() => state.value?.orders.filter(order => order.symbol === selectedSymbol.value && order.status !== 'FILLED' && order.status !== 'CANCELLED') ?? [])
@@ -25,13 +26,14 @@ function selectStock(stock: Stock) { selectedSymbol.value = stock.symbol; buyPri
 function tradeSide(trade: Trade): 'BUY' | 'SELL' { return trade.buyerId === user.value?.userId ? 'BUY' : 'SELL' }
 function executionSummary(order: Order) { const related = currentMyTrades.value.filter(trade => order.side === 'BUY' ? trade.buyOrderId === order.id : trade.sellOrderId === order.id); const filledQuantity = related.reduce((sum, trade) => sum + trade.quantity, 0); const executionAmount = related.reduce((sum, trade) => sum + trade.price * trade.quantity, 0); return { filledQuantity, executionAmount, averageExecutionPrice: filledQuantity ? executionAmount / filledQuantity : 0 } }
 async function refreshState() { if (user.value) state.value = await api(`/state?userId=${user.value.userId}`) }
-function startRealtime(userId: string) { realtimeConnection?.close(); realtimeConnection = connect(userId, async event => { if (event.type === 'market:update') { state.value!.stocks = event.data.stocks; for (const [symbol, point] of Object.entries(event.data.points)) state.value!.priceHistory[symbol] = [...(state.value!.priceHistory[symbol] ?? []), point as any].slice(-90) } if (event.type === 'orderbook:update') state.value!.orderBooks[event.data.symbol] = event.data; if (event.type === 'user:update' || event.type === 'trade:new') await refreshState() }, async () => { try { await refreshState(); message.value = '' } catch { message.value = '连接已恢复，正在同步最新状态…' } }) }
-async function auth(action: 'login' | 'register') { try { const loggedInUser = await api(`/auth/${action}`, { method: 'POST', body: JSON.stringify({ username: username.value, password: password.value }) }); user.value = loggedInUser; saveSessionUserId(loggedInUser.userId); await refreshState(); message.value = ''; startRealtime(loggedInUser.userId) } catch (error) { message.value = (error as Error).message } }
-async function restoreSession() { const userId = loadSessionUserId(); if (!userId) { restoringSession.value = false; return }; restoringSession.value = true; try { const restoredState: UserState = await api(`/state?userId=${userId}`); state.value = restoredState; user.value = { userId: restoredState.user.id }; message.value = ''; restoringSession.value = false; startRealtime(userId) } catch (error) { if (error instanceof ApiError && error.status === 404) { clearSessionUserId(); realtimeConnection?.close(); realtimeConnection = undefined; user.value = undefined; state.value = undefined; restoringSession.value = false; message.value = '登录状态已失效，请重新登录'; return }; message.value = '网络暂不可用，正在恢复连接…'; if (restoreRetryTimer === undefined) restoreRetryTimer = setTimeout(() => { restoreRetryTimer = undefined; void restoreSession() }, 1000) } }
+function invalidateSession() { sessionRecovery?.stop(); sessionRecovery = undefined; clearSessionUserId(); realtimeConnection?.close(); realtimeConnection = undefined; user.value = undefined; state.value = undefined; restoringSession.value = false; message.value = '登录状态已失效，请重新登录' }
+function startRealtime(userId: string) { realtimeConnection?.close(); realtimeConnection = connect(userId, async event => { if (event.type === 'market:update') { state.value!.stocks = event.data.stocks; for (const [symbol, point] of Object.entries(event.data.points)) state.value!.priceHistory[symbol] = [...(state.value!.priceHistory[symbol] ?? []), point as any].slice(-90) } if (event.type === 'orderbook:update') state.value!.orderBooks[event.data.symbol] = event.data; if (event.type === 'user:update' || event.type === 'trade:new') await sessionRecovery?.run() }, async () => { await sessionRecovery?.run() }) }
+function beginSessionRecovery(userId: string) { sessionRecovery?.stop(); restoringSession.value = true; sessionRecovery = createSessionRecovery({ sync: async () => { const restoredState: UserState = await api(`/state?userId=${userId}`); state.value = restoredState; user.value = { userId: restoredState.user.id } }, onSuccess: () => { restoringSession.value = false; message.value = ''; if (!realtimeConnection) startRealtime(userId) }, onInvalid: invalidateSession, onTransientError: () => { message.value = '网络暂不可用，正在恢复连接…' } }); void sessionRecovery.run() }
+async function auth(action: 'login' | 'register') { try { const loggedInUser = await api(`/auth/${action}`, { method: 'POST', body: JSON.stringify({ username: username.value, password: password.value }) }); user.value = loggedInUser; saveSessionUserId(loggedInUser.userId); beginSessionRecovery(loggedInUser.userId) } catch (error) { message.value = (error as Error).message } }
 async function submit(side: 'BUY' | 'SELL') { try { await api('/orders', { method: 'POST', body: JSON.stringify({ userId: user.value?.userId, symbol: selectedSymbol.value, side, price: Number(side === 'BUY' ? buyPrice.value : sellPrice.value), quantity: Number(side === 'BUY' ? buyQuantity.value : sellQuantity.value) }) }); await refreshState(); message.value = '' } catch (error) { message.value = (error as Error).message } }
 async function cancel(order: Order) { try { await api(`/orders/${order.id}/cancel`, { method: 'POST', body: JSON.stringify({ userId: user.value?.userId }) }); await refreshState(); message.value = '' } catch (error) { message.value = (error as Error).message } }
-onMounted(() => { void restoreSession() })
-onBeforeUnmount(() => { realtimeConnection?.close(); if (restoreRetryTimer !== undefined) { clearTimeout(restoreRetryTimer); restoreRetryTimer = undefined } })
+onMounted(() => { const userId = loadSessionUserId(); if (userId) beginSessionRecovery(userId); else restoringSession.value = false })
+onBeforeUnmount(() => { realtimeConnection?.close(); sessionRecovery?.stop() })
 </script>
 <template>
 <main class="terminal">
