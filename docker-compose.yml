@@ -1,0 +1,19 @@
+services:
+  server:
+    build:
+      context: .
+      target: server
+    ports:
+      - "3000:3000"
+
+  web:
+    build:
+      context: .
+      target: web
+    ports:
+      - "5173:5173"
+    environment:
+      API_PROXY_TARGET: http://server:3000
+      WS_PROXY_TARGET: ws://server:3000
+    depends_on:
+      - server

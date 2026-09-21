@@ -11,6 +11,24 @@ npm run dev
 
 打开 http://localhost:5173。服务端运行在 http://localhost:3000，健康检查为 `/api/health`。
 
+### Docker 一键启动
+
+需要已安装 Docker Desktop / Docker Engine 和 Docker Compose。
+
+```bash
+docker compose up --build
+```
+
+打开 http://localhost:5173。
+
+停止并清理容器：
+
+```bash
+docker compose down
+```
+
+Docker 仅用于本题的一键本地运行与复现；运行时数据仍保存在服务端内存中，容器重启后会重置。
+
 ## 测试与构建
 
 ```bash
