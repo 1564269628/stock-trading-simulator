@@ -56,9 +56,102 @@ npm run build
 - 价格优先、时间优先、部分成交
 - 成交后的资金、持仓和成交记录更新
 - REST 命令与初始快照、WebSocket 实时事件
-- WebSocket 断线后自动重连；重连成功后重新请求 `/api/state`，用完整快照同步最新委托、持仓、成交、行情历史和盘口
-- WebSocket 意外断线后固定 1 秒自动重连，并重新请求 `/api/state` 恢复最新业务状态
+- WebSocket 意外断线后固定 1 秒自动重连；重连成功后重新请求 `/api/state`，用完整快照恢复最新委托、持仓、成交、行情历史和盘口
 - 浏览器页面因网络切换被重新加载时，会使用本地保存的 userId 自动恢复登录状态；暂时断网不会要求重新登录。只有服务端内存中已不存在该用户（例如服务重启）时才返回登录页
+
+
+## 系统架构
+
+系统采用“REST 负责命令与完整快照、WebSocket 负责实时事件”的方式组织前后端。服务端 `MemoryStore` 是运行时唯一状态源；前端首次进入或 WebSocket 重连后，通过 `/api/state` 重新获取完整快照，避免断线期间遗漏事件导致状态不一致。
+
+### 前后端总体架构
+
+```mermaid
+flowchart LR
+    subgraph Web["Vue 3 前端"]
+        App["App.vue<br/>页面状态与交易交互"]
+        API["services/api.ts<br/>REST 客户端"]
+        WS["services/websocket.ts<br/>WebSocket / 自动重连"]
+        Recovery["services/sessionRecovery.ts<br/>完整状态恢复 / 重试"]
+
+        App --> API
+        App --> WS
+        WS --> Recovery
+        Recovery --> API
+    end
+
+    subgraph Server["Node.js / Express 后端"]
+        Routes["routes.ts<br/>REST API"]
+        Hub["websocketHub.ts<br/>实时消息推送"]
+        Trading["tradingService.ts<br/>下单校验 / 资金持仓结算"]
+        Matching["matchingEngine.ts<br/>价格优先 / 时间优先撮合"]
+        View["marketView.ts / tradeView.ts<br/>盘口与成交视图"]
+        Simulator["marketSimulator.ts<br/>referencePrice 模拟"]
+        Bot["botTrader.ts<br/>Bot 流动性"]
+        Store["MemoryStore<br/>用户 / 订单 / 盘口 / 持仓 / 成交"]
+
+        Routes --> Trading
+        Trading --> Matching
+        Matching --> Store
+        Trading --> Store
+
+        Routes --> View
+        View --> Store
+
+        Bot --> Trading
+        Bot --> Hub
+
+        Simulator --> Store
+        Simulator --> Hub
+
+        Routes --> Hub
+        Hub --> View
+    end
+
+    API -- "HTTP /api/*" --> Routes
+    Hub -- "WebSocket /ws" --> WS
+```
+
+### 核心交易与实时同步流程
+
+```mermaid
+sequenceDiagram
+    participant U as Vue 前端
+    participant R as REST Routes
+    participant T as TradingService
+    participant M as MatchingEngine
+    participant S as MemoryStore
+    participant W as WebSocketHub
+
+    U->>R: POST /api/orders
+    R->>T: submitOrder()
+    T->>T: 校验资金 / 持仓
+    T->>M: matchOrder()
+    M->>S: 读取并更新订单簿
+    M-->>T: Trade[]
+    T->>S: 更新订单、资金、持仓、latestPrice
+    T-->>R: { order, trades }
+    R->>W: publishOrderResult()
+    W-->>U: user:update
+    W-->>U: trade:new
+    W-->>U: orderbook:update
+```
+
+成交规则始终由 `MatchingEngine` 统一执行：买单优先匹配最低卖价，卖单优先匹配最高买价；同价时按 `sequence` 保证时间优先；真实成交价使用先进入订单簿的 resting order 价格。
+
+### WebSocket 断线恢复
+
+```mermaid
+flowchart LR
+    A["WebSocket 正常连接"] --> B["网络意外断开"]
+    B --> C["1 秒后自动重连"]
+    C --> D["重连成功"]
+    D --> E["GET /api/state"]
+    E --> F["完整快照覆盖前端状态"]
+    F --> A
+```
+
+`websocket.ts` 负责 reconnect，`sessionRecovery.ts` 负责 resync。若 `/api/state` 返回 404，说明服务端内存中已不存在原用户，会清理本地会话并返回登录页；网络等临时错误则保留会话并继续重试。
 
 ## 结构
 
