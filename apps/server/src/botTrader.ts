@@ -7,6 +7,7 @@ export const BOT_PRICE_RANGE = 0.005
 const quantities = [10, 20, 50, 100]
 
 export function initializeBots(store: MemoryStore) {
+  // Bot 只用于模拟其他市场参与者、持续提供流动性；它们仍然是普通 User，并遵守相同的资金/持仓规则。
   const bots = ['market-bot-1', 'market-bot-2', 'market-bot-3'].map(name => createUser(store, name, 'bot'))
   bots.forEach(bot => { bot.cash = 100_000_000; const positions = store.positions.get(bot.id)!; positions.set('600519', 100_000); positions.set('000858', 300_000); positions.set('300750', 200_000) })
   return bots
@@ -14,11 +15,13 @@ export function initializeBots(store: MemoryStore) {
 
 const randomCount = (random: () => number) => 2 + Math.floor(random() * 3)
 const randomQuantity = (random: () => number) => quantities[Math.floor(random() * quantities.length)]
+// referencePrice 只是 Bot 的报价中心，最终 Trade.price 仍由撮合引擎按 resting order 决定。
 const randomPrice = (referencePrice: number, random: () => number) => Number(Math.max(0.01, referencePrice * (1 + (random() * 2 - 1) * BOT_PRICE_RANGE)).toFixed(2))
 
 export function expireBotOrders(store: MemoryStore, bots: ReturnType<typeof initializeBots>, now = Date.now()) {
   const botIds = new Set(bots.map(bot => bot.id)); const expired = []
   for (const order of store.orders.values()) {
+    // 长时间未成交的 Bot 挂单自动撤销，避免随机订单无限累积把订单簿越堆越大。
     if (botIds.has(order.userId) && (order.status === 'PENDING' || order.status === 'PARTIALLY_FILLED') && now - Date.parse(order.createdAt) >= BOT_ORDER_TTL_MS) expired.push(cancelOrder(store, order.userId, order.id))
   }
   return expired
@@ -27,9 +30,12 @@ export function expireBotOrders(store: MemoryStore, bots: ReturnType<typeof init
 export function runBotTick(store: MemoryStore, bots: ReturnType<typeof initializeBots>, random = Math.random) {
   expireBotOrders(store, bots)
   const results: ReturnType<typeof submitOrder>[] = []
+
+  // 每个 tick 都给所有股票生成少量双边随机订单，让单用户演示时也能看到真实盘口和成交。
   for (const symbol of store.stocks.keys()) {
     const stock = store.stocks.get(symbol)!; const buyCount = randomCount(random); const sellCount = randomCount(random)
     for (let index = 0; index < buyCount; index++) {
+      // Bot 不直接修改订单簿或伪造成交，和真实用户一样统一调用 submitOrder。
       try { results.push(submitOrder(store, { userId: bots[index % bots.length].id, symbol, side: 'BUY', price: randomPrice(stock.referencePrice, random), quantity: randomQuantity(random) })) } catch (error) { if ((error as Error).message !== 'insufficient cash') throw error }
     }
     for (let index = 0; index < sellCount; index++) {

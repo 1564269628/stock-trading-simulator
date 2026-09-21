@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { api } from './services/api'
 import { connect } from './services/websocket'
+import { clearSessionUserId, loadSessionUserId, saveSessionUserId } from './services/session'
+import { createSessionRecovery, type SessionRecovery } from './services/sessionRecovery'
 import type { Order, Stock, Trade, UserState } from './types'
 import PriceChart from './components/PriceChart.vue'
 import OrderBookPanel from './components/OrderBookPanel.vue'
@@ -9,6 +11,9 @@ import './styles.css'
 import { formatDateTime } from './utils/formatDateTime'
 
 const username = ref(''); const password = ref(''); const user = ref<{ userId: string }>(); const state = ref<UserState>(); const message = ref('')
+const restoringSession = ref(Boolean(loadSessionUserId()))
+let realtimeConnection: ReturnType<typeof connect> | undefined
+let sessionRecovery: SessionRecovery | undefined
 const selectedSymbol = ref('600519'); const buyPrice = ref(1500); const buyQuantity = ref(100); const sellPrice = ref(1500); const sellQuantity = ref(100)
 const selectedStock = computed<Stock | undefined>(() => state.value?.stocks.find(stock => stock.symbol === selectedSymbol.value))
 const currentOpenOrders = computed(() => state.value?.orders.filter(order => order.symbol === selectedSymbol.value && order.status !== 'FILLED' && order.status !== 'CANCELLED') ?? [])
@@ -21,13 +26,19 @@ function selectStock(stock: Stock) { selectedSymbol.value = stock.symbol; buyPri
 function tradeSide(trade: Trade): 'BUY' | 'SELL' { return trade.buyerId === user.value?.userId ? 'BUY' : 'SELL' }
 function executionSummary(order: Order) { const related = currentMyTrades.value.filter(trade => order.side === 'BUY' ? trade.buyOrderId === order.id : trade.sellOrderId === order.id); const filledQuantity = related.reduce((sum, trade) => sum + trade.quantity, 0); const executionAmount = related.reduce((sum, trade) => sum + trade.price * trade.quantity, 0); return { filledQuantity, executionAmount, averageExecutionPrice: filledQuantity ? executionAmount / filledQuantity : 0 } }
 async function refreshState() { if (user.value) state.value = await api(`/state?userId=${user.value.userId}`) }
-async function auth(action: 'login' | 'register') { try { user.value = await api(`/auth/${action}`, { method: 'POST', body: JSON.stringify({ username: username.value, password: password.value }) }); const loggedInUser = user.value!; await refreshState(); message.value = ''; connect(loggedInUser.userId, async event => { if (event.type === 'market:update') { state.value!.stocks = event.data.stocks; for (const [symbol, point] of Object.entries(event.data.points)) state.value!.priceHistory[symbol] = [...(state.value!.priceHistory[symbol] ?? []), point as any].slice(-90) } if (event.type === 'orderbook:update') state.value!.orderBooks[event.data.symbol] = event.data; if (event.type === 'user:update' || event.type === 'trade:new') await refreshState() }) } catch (error) { message.value = (error as Error).message } }
+function invalidateSession() { sessionRecovery?.stop(); sessionRecovery = undefined; clearSessionUserId(); realtimeConnection?.close(); realtimeConnection = undefined; user.value = undefined; state.value = undefined; restoringSession.value = false; message.value = '登录状态已失效，请重新登录' }
+function startRealtime(userId: string) { realtimeConnection?.close(); realtimeConnection = connect(userId, async event => { if (event.type === 'market:update') { state.value!.stocks = event.data.stocks; for (const [symbol, point] of Object.entries(event.data.points)) state.value!.priceHistory[symbol] = [...(state.value!.priceHistory[symbol] ?? []), point as any].slice(-90) } if (event.type === 'orderbook:update') state.value!.orderBooks[event.data.symbol] = event.data; if (event.type === 'user:update' || event.type === 'trade:new') await sessionRecovery?.run() }, async () => { await sessionRecovery?.run() }) }
+function beginSessionRecovery(userId: string) { sessionRecovery?.stop(); restoringSession.value = true; sessionRecovery = createSessionRecovery({ sync: async () => { const restoredState: UserState = await api(`/state?userId=${userId}`); state.value = restoredState; user.value = { userId: restoredState.user.id } }, onSuccess: () => { restoringSession.value = false; message.value = ''; if (!realtimeConnection) startRealtime(userId) }, onInvalid: invalidateSession, onTransientError: () => { message.value = '网络暂不可用，正在恢复连接…' } }); void sessionRecovery.run() }
+async function auth(action: 'login' | 'register') { try { const loggedInUser = await api(`/auth/${action}`, { method: 'POST', body: JSON.stringify({ username: username.value, password: password.value }) }); user.value = loggedInUser; saveSessionUserId(loggedInUser.userId); beginSessionRecovery(loggedInUser.userId) } catch (error) { message.value = (error as Error).message } }
 async function submit(side: 'BUY' | 'SELL') { try { await api('/orders', { method: 'POST', body: JSON.stringify({ userId: user.value?.userId, symbol: selectedSymbol.value, side, price: Number(side === 'BUY' ? buyPrice.value : sellPrice.value), quantity: Number(side === 'BUY' ? buyQuantity.value : sellQuantity.value) }) }); await refreshState(); message.value = '' } catch (error) { message.value = (error as Error).message } }
 async function cancel(order: Order) { try { await api(`/orders/${order.id}/cancel`, { method: 'POST', body: JSON.stringify({ userId: user.value?.userId }) }); await refreshState(); message.value = '' } catch (error) { message.value = (error as Error).message } }
+onMounted(() => { const userId = loadSessionUserId(); if (userId) beginSessionRecovery(userId); else restoringSession.value = false })
+onBeforeUnmount(() => { realtimeConnection?.close(); sessionRecovery?.stop() })
 </script>
 <template>
 <main class="terminal">
-<section v-if="!user" class="auth panel"><h1>Stock Trading Simulator</h1><input v-model="username" placeholder="用户名"><input v-model="password" type="password" placeholder="密码"><button @click="auth('login')">登录</button><button @click="auth('register')">注册</button><p class="error">{{ message }}</p></section>
+<section v-if="restoringSession" class="auth panel"><h1>Stock Trading Simulator</h1><p>正在恢复连接和登录状态…</p><p class="muted">{{ message }}</p></section>
+<section v-else-if="!user" class="auth panel"><h1>Stock Trading Simulator</h1><input v-model="username" placeholder="用户名"><input v-model="password" type="password" placeholder="密码"><button @click="auth('login')">登录</button><button @click="auth('register')">注册</button><p class="error">{{ message }}</p></section>
 <template v-else>
 <header class="topbar"><div><span class="muted">当前股票</span><h1>{{ selectedStock?.name }} <small>{{ selectedStock?.symbol }}</small></h1></div><div>资金 <strong>{{ state?.user.cash.toFixed(2) }}</strong></div></header>
 <section class="layout"><aside class="panel stock-list"><h3>股票选择</h3><button v-for="stock in state?.stocks" :key="stock.symbol" :class="{ active: stock.symbol === selectedSymbol }" @click="selectStock(stock)"><div class="stock-name">{{ stock.name }}</div><div>{{ stock.symbol }} · {{ stock.latestPrice.toFixed(2) }}</div><div :class="stock.changePercent >= 0 ? 'up' : 'down'">{{ stock.changePercent.toFixed(2) }}%</div></button></aside>

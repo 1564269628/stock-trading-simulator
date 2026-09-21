@@ -32,6 +32,20 @@ describe('matching engine', () => {
     store.getOrderBook('AAPL').sells.push(a, b); const incoming = order('buy', 'BUY', 10, 10, 3); const trades = matchOrder(store, incoming)
     expect(trades.map(t => t.quantity)).toEqual([4, 6]); expect(incoming.status).toBe('FILLED'); expect(b.remainingQuantity).toBe(2); expect(b.status).toBe('PARTIALLY_FILLED')
   })
+  it('uses time priority between equal-price resting buys', () => {
+    const store = new MemoryStore(); const first = order('first-buy', 'BUY', 10, 5, 1); const second = order('second-buy', 'BUY', 10, 5, 2)
+    store.getOrderBook('AAPL').buys.push(second, first)
+    const trades = matchOrder(store, order('sell', 'SELL', 10, 5, 3))
+    expect(trades).toHaveLength(1); expect(trades[0].buyOrderId).toBe('first-buy'); expect(trades[0].price).toBe(10)
+  })
+  it('keeps the remaining incoming buy in the book after a partial fill', () => {
+    const store = new MemoryStore(); const restingSell = order('sell', 'SELL', 10, 4, 1); const incomingBuy = order('buy', 'BUY', 10, 10, 2)
+    store.getOrderBook('AAPL').sells.push(restingSell)
+    const trades = matchOrder(store, incomingBuy); const book = store.getOrderBook('AAPL')
+    expect(trades).toHaveLength(1); expect(trades[0].quantity).toBe(4)
+    expect(incomingBuy.status).toBe('PARTIALLY_FILLED'); expect(incomingBuy.remainingQuantity).toBe(6); expect(book.buys).toContain(incomingBuy)
+    expect(restingSell.status).toBe('FILLED'); expect(restingSell.remainingQuantity).toBe(0); expect(book.sells).not.toContain(restingSell)
+  })
   it('does not fill non-crossing orders and keeps them in the book', () => {
     const store = new MemoryStore(); const ask = order('ask', 'SELL', 11, 10, 1); store.getOrderBook('AAPL').sells.push(ask); const incoming = order('buy', 'BUY', 10, 2, 2)
     expect(matchOrder(store, incoming)).toHaveLength(0); expect(store.getOrderBook('AAPL').buys).toContain(incoming)

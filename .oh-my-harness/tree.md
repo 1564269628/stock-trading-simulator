@@ -3,7 +3,7 @@
 Use this file for navigation only. Verify implementation details by reading source files directly.
 
 - Source: `git ls-files --cached --others --exclude-standard`
-- Entries: 82
+- Entries: 97
 
 ```text
 ./
@@ -79,7 +79,13 @@ Use this file for navigation only. Verify implementation details by reading sour
 │       │   │   ├── OrderBookPanel.vue
 │       │   │   └── PriceChart.vue
 │       │   ├── services/
+│       │   │   ├── api.test.ts
 │       │   │   ├── api.ts
+│       │   │   ├── session.test.ts
+│       │   │   ├── session.ts
+│       │   │   ├── sessionRecovery.test.ts
+│       │   │   ├── sessionRecovery.ts
+│       │   │   ├── websocket.test.ts
 │       │   │   └── websocket.ts
 │       │   ├── utils/
 │       │   │   └── formatDateTime.ts
@@ -93,15 +99,22 @@ Use this file for navigation only. Verify implementation details by reading sour
 │       └── vite.config.ts
 ├── docs/
 │   ├── harness/
-│   │   └── plans/
-│   │       ├── 2026-09-20-cash-reservation-time-format-plan.md
-│   │       ├── 2026-09-20-latest-price-trade-consistency-plan.md
-│   │       ├── 2026-09-20-order-history-market-trades-ui-plan.md
-│   │       ├── 2026-09-20-persistent-orderbook-liquidity-plan.md
-│   │       ├── 2026-09-20-reference-price-active-liquidity-plan.md
-│   │       ├── 2026-09-20-resting-order-price-plan.md
-│   │       ├── 2026-09-20-trading-experience-manual-acceptance-fixes.md
-│   │       └── 2026-09-20-trading-experience-plan.md
+│   │   ├── plans/
+│   │   │   ├── 2026-09-20-cash-reservation-time-format-plan.md
+│   │   │   ├── 2026-09-20-latest-price-trade-consistency-plan.md
+│   │   │   ├── 2026-09-20-order-history-market-trades-ui-plan.md
+│   │   │   ├── 2026-09-20-persistent-orderbook-liquidity-plan.md
+│   │   │   ├── 2026-09-20-reference-price-active-liquidity-plan.md
+│   │   │   ├── 2026-09-20-resting-order-price-plan.md
+│   │   │   ├── 2026-09-20-trading-experience-manual-acceptance-fixes.md
+│   │   │   ├── 2026-09-20-trading-experience-plan.md
+│   │   │   ├── 2026-09-21-docker-one-command-startup-plan.md
+│   │   │   ├── 2026-09-21-docker-readme-pull-first-plan.md
+│   │   │   ├── 2026-09-21-matching-engine-edge-case-tests-plan.md
+│   │   │   ├── 2026-09-21-mobile-session-recovery-plan.md
+│   │   │   └── 2026-09-21-websocket-reconnect-resync-plan.md
+│   │   └── reviews/
+│   │       └── 2026-09-21-pr5-full-branch-review.md
 │   ├── specs/
 │   │   ├── agent-workflow.md
 │   │   └── review-guidelines.md
@@ -109,9 +122,12 @@ Use this file for navigation only. Verify implementation details by reading sour
 │   ├── architecture.md
 │   ├── implementation-plan.md
 │   └── requirements.md
+├── .dockerignore
 ├── .gitignore
 ├── .gitkeep
 ├── AGENTS.md
+├── docker-compose.yml
+├── Dockerfile
 ├── package-lock.json
 ├── package.json
 └── README.md
