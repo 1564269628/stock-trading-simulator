@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace apps/server\" \"npm run dev --workspace apps/web\"",
     "build": "npm run build --workspace apps/server && npm run build --workspace apps/web",
-    "test": "npm test --workspace apps/server"
+    "test": "npm test --workspace apps/server && npm test --workspace apps/web"
   },
   "devDependencies": { "concurrently": "^9.1.2" }
 }
